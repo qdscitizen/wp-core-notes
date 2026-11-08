@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordPress Core Source — Study Notes</title>
+<style>
+  :root {
+    --ink: #1a1a2e; --muted: #5c6270; --accent: #21759b; --accent2: #7a4fb3;
+    --bg: #f6f7f9; --card: #ffffff; --line: #e3e6ea; --code-bg: #101418; --code-ink: #d5e0ee;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.65; }
+  header.hero { background: linear-gradient(135deg, #101418 0%, #1d3a52 60%, #21759b 100%); color: #fff; padding: 48px 24px 40px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .hero h1 { margin: 0 0 8px; font-size: 30px; }
+  .hero p { margin: 4px 0; color: #cfe0ec; }
+  .hero .meta { font-size: 13px; color: #9db8ca; margin-top: 14px; }
+  main { padding: 32px 24px 64px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 26px 28px; margin: 22px 0; }
+  h2 { font-size: 20px; margin: 0 0 4px; color: var(--accent); border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+  h2 .num { display: inline-block; background: var(--accent); color: #fff; border-radius: 6px; font-size: 13px; padding: 2px 9px; margin-right: 10px; vertical-align: 3px; }
+  h3 { font-size: 16px; margin: 22px 0 6px; }
+  p, li { font-size: 14.5px; }
+  .takeaway { background: #eef6fa; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 14px 0; font-size: 14px; }
+  .warn { background: #fdf3e7; border-left: 4px solid #d98324; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #f0f3f6; }
+  code { font-family: Consolas, "Courier New", monospace; background: #eceff3; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .file { color: #8a6d3b; font-family: Consolas, monospace; font-size: 12.5px; }
+  .pill { display: inline-block; background: #efe7f8; color: var(--accent2); border-radius: 20px; padding: 1px 10px; font-size: 12px; margin: 1px 2px; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 24px 0 40px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>WordPress Core Source — Study Notes</h1>
+    <p>A hands-on walkthrough of the read path, write path, security layer, and the block system — verified against the actual source on disk.</p>
+    <div class="meta">
+      Study window: Oct–Nov 2026 &nbsp;·&nbsp; Local stack: XAMPP (Apache :80, PHP 8.2.12, MySQL 5.7) &nbsp;·&nbsp; WordPress: bleeding-edge (7.0-alpha)<br>
+      Method: read source with file:line evidence → probe the live site with a browser → confirm behavior under Xdebug
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ===================== 1 ===================== -->
+  <section>
+    <h2><span class="num">1</span>The <code>the_content</code> Read Path — a One-Way Pipeline</h2>
+    <p>The front-end rendering chain registered in <span class="file">wp-includes/default-filters.php:201–210</span> is a strict, one-directional pipeline (like <code>Array.reduce</code>, not <code>addEventListener</code>). Each callback receives the previous callback's return value. Content appended at priority 20 never flows back through 8–11.</p>
+    <table>
+      <tr><th>Pri</th><th>Callback</th><th>What it actually does</th></tr>
+      <tr><td>8</td><td><code>apply_block_hooks_to_content_from_post_object</code></td><td>Injects plugin-declared "hooked blocks" into the markup string (tree mutation, no HTML yet)</td></tr>
+      <tr><td>9</td><td><code>do_blocks</code></td><td>Parses block markup, runs <code>render_callback</code> for dynamic blocks — markup becomes HTML</td></tr>
+      <tr><td>10</td><td><code>wptexturize</code> · <code>wpautop</code> · <code>shortcode_unautop</code> · <code>prepend_attachment</code> · <code>wp_replace_insecure_home_url</code></td><td>Typography (<code>"</code>→<code>&ldquo;</code>, <code>...</code>→<code>&hellip;</code>, skips <code>pre/code</code>), paragraph wrapping, <code>&lt;p&gt;</code> cleanup around shortcodes</td></tr>
+      <tr><td>11</td><td><code>do_shortcode</code></td><td>Deliberately <em>after</em> wpautop so shortcode output escapes paragraph wrapping</td></tr>
+      <tr><td>12</td><td><code>wp_filter_content_tags</code></td><td>Lazy-loading / srcset for images &amp; iframes</td></tr>
+      <tr><td>20</td><td><code>convert_smilies</code></td><td>Text emoticons → GIF images (runs last so generated HTML gets prettified too)</td></tr>
+    </table>
+    <div class="takeaway">Priority is registration-order-sensitive at equal values: removing and re-adding <code>wpautop</code> at 10 silently moves it <em>after</em> <code>shortcode_unautop</code> — a real foot-gun when writing "conditional wpautop" guards.</div>
+  </section>
+
+  <!-- ===================== 2 ===================== -->
+  <section>
+    <h2><span class="num">2</span>Shortcodes &amp; the Hook API Internals</h2>
+    <ul>
+      <li>Paired shortcodes (<code>[foo]body[/foo]</code>) pass <code>$content = $m[5]</code> to the handler (<span class="file">wp-includes/shortcodes.php:432</span>). <strong>No recursion</strong> — nested shortcodes require the handler to call <code>do_shortcode($content)</code> itself.</li>
+      <li><code>has_shortcode()</code> short-circuits without <code>[</code>, verifies registration, recurses into inner content (<span class="file">shortcodes.php:149–169</span>).</li>
+      <li><code>remove_filter()</code> deletes one callback key from <code>WP_Hook-&gt;callbacks[$priority]</code>; the <code>WP_Hook</code> object itself is <strong>reused</strong>, not recreated (<span class="file">plugin.php:124–126</span>).</li>
+      <li><code>make_clickable()</code> (URL → <code>&lt;a&gt;</code>) is <strong>not</strong> on <code>the_content</code> by default.</li>
+    </ul>
+    <div class="takeaway">Common plugin pattern <code>remove_filter('the_content','wpautop')</code> exists because wpautop at priority 10 has already run before your own priority-10 callback — a re-added copy is the only way to control it.</div>
+  </section>
+
+  <!-- ===================== 3 ===================== -->
+  <section>
+    <h2><span class="num">3</span>Blocks — Static vs Dynamic, and Where Configuration Lives</h2>
+    <div class="grid">
+      <div>
+        <h3>Static block — <code>core/paragraph</code></h3>
+        <pre><code>// wp-includes/blocks/paragraph.php:45
+function register_block_core_paragraph() {
+    register_block_type_from_metadata(
+        __DIR__ . '/paragraph'   // no render_callback
+    );
+}
+add_action( 'init', 'register_block_core_paragraph' );</code></pre>
+        <p>Server outputs the stored HTML as-is; only <code>render_block_core/paragraph</code> filters touch it (e.g. auto-adding the <code>wp-block-paragraph</code> class).</p>
+      </div>
+      <div>
+        <h3>Dynamic block — <code>core/accordion</code></h3>
+        <pre><code>// wp-includes/blocks/accordion.php:41
+register_block_type_from_metadata(
+    __DIR__ . '/accordion',
+    array(
+      'render_callback' =>
+        'render_block_core_accordion',
+    )
+);</code></pre>
+        <p><code>do_blocks</code> → <code>WP_Block::render()</code> executes the callback (<span class="file">class-wp-block.php:596</span>). Unregistered block markup is not dynamic — its inner HTML still prints.</p>
+      </div>
+    </div>
+    <h3>Configuration map</h3>
+    <table>
+      <tr><th>File</th><th>Role</th></tr>
+      <tr><td><span class="file">wp-includes/blocks/&lt;name&gt;/block.json</span></td><td>Per-block manifest: name, attributes, supports + <code>editor.css</code>/<code>style.css</code></td></tr>
+      <tr><td><span class="file">wp-includes/blocks/&lt;name&gt;.php</span></td><td>Dynamic render callbacks, loaded via <code>blocks/require-dynamic-blocks.php</code></td></tr>
+      <tr><td><span class="file">wp-includes/blocks/blocks-json.php</span></td><td>Generated PHP array of all core block metadata</td></tr>
+      <tr><td><span class="file">wp-settings.php:407</span></td><td>Load entry: <code>require wp-includes/blocks/index.php</code></td></tr>
+    </table>
+    <h3>Block Hooks (priority 8) — "attach me automatically"</h3>
+    <p>A plugin declares <code>"blockHooks": { "core/post-content": "after" }</code> in its block.json; <code>apply_block_hooks_to_content_from_post_object()</code> (<span class="file">blocks.php:1214</span>) wraps the post in a temporary container block, inserts <code>&lt;!-- wp:myplugin/note /--&gt;</code> after it, then unwraps. Priority 8 runs <em>before</em> <code>do_blocks</code> precisely so the injected markup still gets rendered at 9.</p>
+    <div class="takeaway">Gutenberg is the historical project name; in code there is only <code>core/paragraph</code>-style block names. "Gutenberg blocks" = blocks.</div>
+  </section>
+
+  <!-- ===================== 4 ===================== -->
+  <section>
+    <h2><span class="num">4</span>The <code>pre_*</code> Write Path — Input Sanitization Before INSERT</h2>
+    <p>These fire <strong>only when an official write function runs</strong> (context <code>'db'</code>), and never during reads:</p>
+    <table>
+      <tr><th>Action</th><th>Entry function</th><th>Filter application site</th></tr>
+      <tr><td>Insert / update post</td><td><code>wp_insert_post()</code> → <code>sanitize_post($postarr,'db')</code></td><td><span class="file">post.php:4539</span> → <span class="file">:3118</span></td></tr>
+      <tr><td>Insert / update term</td><td><code>wp_insert_term()</code> / <code>wp_update_term()</code></td><td><span class="file">taxonomy.php:2477</span> / <span class="file">:3255</span></td></tr>
+      <tr><td>Create / update user</td><td><code>wp_insert_user()</code> (hand-written per field)</td><td><span class="file">user.php:2376–2490</span></td></tr>
+      <tr><td>Comment submitted</td><td><code>wp_new_comment()</code> → <code>wp_filter_comment()</code></td><td><span class="file">comment.php:2220</span>, <span class="file">:2228</span></td></tr>
+      <tr><td>Direct <code>$wpdb-&gt;insert()</code></td><td>—</td><td><strong>No <code>pre_*</code> runs at all</strong></td></tr>
+    </table>
+    <h3>The three-stage pipeline for short strings (<span class="file">default-filters.php:32–35</span>)</h3>
+    <ol>
+      <li><code>sanitize_text_field</code> — invalid UTF-8 check, strip tags (nukes <code>script/style</code> blocks whole), collapse <code>[\r\n\t ]+</code>, trim, remove all <code>%xx</code> encodings (<span class="file">formatting.php:5633</span>)</li>
+      <li><code>wp_filter_kses</code> — whitelist filter using the narrow <code>$allowedtags</code> set (<span class="file">kses.php:602</span>); post content uses the much wider <code>$allowedposttags</code></li>
+      <li><code>_wp_specialchars</code> (pri 30) — <code>&amp;</code> <code>&lt;</code> <code>&gt;</code> → entities, quotes untouched, no double-encoding</li>
+    </ol>
+    <div class="takeaway">Every field has a mirrored pair: <code>pre_term_name</code> (save) vs <code>term_name</code> (display, admin-only hardening). Sanitize on write, defend-in-depth on read.</div>
+  </section>
+
+  <!-- ===================== 5 ===================== -->
+  <section>
+    <h2><span class="num">5</span>Nonces — Proof of Intent, Not Permission</h2>
+    <p>A nonce answers "did the current user's own browser deliberately send this?" while <code>current_user_can()</code> answers "may this user do it?". Cookies ride along on cross-site requests, so capability checks alone are CSRF-vulnerable. Both are required, nonce first.</p>
+    <table>
+      <tr><th>Surface</th><th>Generate</th><th>Verify</th></tr>
+      <tr><td>Admin forms</td><td><code>wp_nonce_field($action)</code> <span class="file">functions.php:1899</span></td><td><code>check_admin_referer()</code> <span class="file">pluggable.php:1372</span></td></tr>
+      <tr><td>Link actions</td><td><code>wp_nonce_url()</code> <span class="file">functions.php:1868</span></td><td>same</td></tr>
+      <tr><td>AJAX</td><td>localized nonce</td><td><code>check_ajax_referer()</code> <span class="file">pluggable.php:1417</span></td></tr>
+      <tr><td>REST + cookie auth</td><td><code>wp_create_nonce('wp_rest')</code> → <code>X-WP-Nonce</code> header</td><td><code>rest_cookie_check_errors()</code> <span class="file">rest-api.php:1122</span></td></tr>
+    </table>
+    <ul>
+      <li>Missing nonce on a cookie-authenticated REST call → <code>wp_set_current_user(0)</code>, the request silently becomes a guest (<span class="file">rest-api.php:1150</span>) — the symptom is a misleading 403 "forbidden".</li>
+      <li>Hash input = <code>tick | action | uid | session_token</code> (<span class="file">pluggable.php:2533</span>): logout, new session, or different action invalidates instantly.</li>
+      <li>Lifetime 24h in two 12h windows — <code>wp_verify_nonce</code> returns 1 (current) or 2 (previous) (<span class="file">:2486–2500</span>).</li>
+      <li>Core echoes a fresh <code>X-WP-Nonce</code> response header on success (<span class="file">rest-api.php:1162</span>); clients that never read it die after 24h.</li>
+    </ul>
+    <div class="takeaway warn">Audit finding in the draftlab-ai-pro plugin: the admin JS takes the nonce once at page load and never refreshes it from response headers — any admin tab left open &gt; 24 h starts throwing 403s until reload.</div>
+  </section>
+
+  <!-- ===================== 6 ===================== -->
+  <section>
+    <h2><span class="num">6</span>Case Study: "Why Can't I Delete Two Header Tabs?"</h2>
+    <p>The Happy Paws demo site combines a <strong>block theme</strong> (Twenty Twenty-Five) with an <strong>Elementor-built front page</strong>. That single fact explains every dead end:</p>
+    <table>
+      <tr><th></th><th>Site Editor "导航栏" (<code>wp_navigation</code> #4)</th><th>Header tabs actually shown (classic Menu #59)</th></tr>
+      <tr><td>Storage</td><td>One <code>wp_posts</code> row, content = block markup <code>&lt;!-- wp:page-list /--&gt;</code></td><td><code>wp_terms</code> term + <code>nav_menu_item</code> posts + <code>wp_postmeta</code> + <code>wp_term_relationships</code></td></tr>
+      <tr><td>Renderer</td><td>Theme <code>patterns/header.php</code> <code>wp:navigation</code> block (auto-created, page-list fallback)</td><td>Elementor "WordPress Menu" widget (Unlimited Elements) bound to Menu</td></tr>
+      <tr><td>Edited where</td><td>Site Editor → Navigation</td><td>Appearance → Menus — <strong>hidden</strong> because block themes register no menu locations</td></tr>
+    </table>
+    <p><strong>Why editing the Site Editor navigation did nothing:</strong> two parallel navigation systems with zero data linkage. The block-theme navigation renders only on templates the Elementor page doesn't override (404, archives).</p>
+    <h3>Working removal paths</h3>
+    <ul>
+      <li><strong>Borrow a classic theme's admin screen:</strong> activate Astra (registers locations, <span class="file">astra/inc/admin-functions.php:28</span>) → Appearance → Menus reappears → remove items → switch back. Menu data is theme-independent.</li>
+      <li><strong>Direct SQL</strong> (menu item IDs 9692, 9700): delete from <code>wp_postmeta</code>, <code>wp_term_relationships</code>, then <code>wp_posts WHERE post_type='nav_menu_item'</code> — three tables, never one.</li>
+    </ul>
+    <div class="takeaway">Direct DB edits are viable when values are self-contained (menu items, post fields). Never hand-edit serialized option values (length prefixes break <code>unserialize</code>), password hashes, or denormalized counters.</div>
+  </section>
+
+  <!-- ===================== 7 ===================== -->
+  <section>
+    <h2><span class="num">7</span>Tooling — Xdebug Under XAMPP</h2>
+    <ul>
+      <li><strong>Install:</strong> <code>php_xdebug-3.4.0-8.2-vs16-x86_64.dll</code> → <span class="file">D:\xampp\php\ext\</span>; php.ini gets <code>zend_extension</code>, <code>xdebug.mode=debug</code>, <code>xdebug.start_with_request=trigger</code>, port 9003.</li>
+      <li><strong>Trigger mode beats always-on:</strong> without a listener, every page load would hang for seconds. Debugging starts only via <code>?XDEBUG_TRIGGER=1</code> (or the browser helper extension / cookie).</li>
+      <li><strong>VS Code:</strong> PHP Debug (felixfbecker) extension, config "Listen for Xdebug", port 9003, no <code>pathMappings</code> needed locally.</li>
+      <li><strong>Match the breakpoint to the execution path:</strong> <code>do_blocks</code> hits on front-end renders (the_content), not on the admin edit screen, whose REST <code>context=edit</code> returns raw stored content.</li>
+    </ul>
+    <div class="takeaway">Watching <code>$content</code> transform from <code>&lt;!-- wp:paragraph --&gt;…</code> markup into final HTML inside <code>do_blocks()</code> is the fastest way to internalize the whole block pipeline.</div>
+  </section>
+
+  <!-- ===================== 8 ===================== -->
+  <section>
+    <h2><span class="num">8</span>Key Takeaways</h2>
+    <ul>
+      <li><strong>Read path vs write path:</strong> <code>the_content</code> runs per render; <code>pre_*</code> runs once per save. Two pipelines, two mental models.</li>
+      <li><strong>Blocks = named, parameterized components.</strong> Registration = metadata + optional <code>render_callback</code>; the callback's presence is the entire static/dynamic distinction.</li>
+      <li><strong>Everything visible but un-greppable lives in MySQL:</strong> menus, widgets, options, Elementor data. Search the database before doubting your grep.</li>
+      <li><strong>Block theme ≠ no menus:</strong> it only hides the classic menu UI. The data and its consumers (Elementor, plugins) keep working.</li>
+      <li><strong>Nonce ≠ capability; trigger-mode Xdebug ≠ broken Xdebug.</strong> Both "failures" were correct behavior waiting for the right invocation.</li>
+    </ul>
+    <p style="margin-top:18px">
+      <span class="pill">the_content</span><span class="pill">wpautop</span><span class="pill">shortcodes</span>
+      <span class="pill">WP_Hook</span><span class="pill">block.json</span><span class="pill">render_callback</span>
+      <span class="pill">blockHooks</span><span class="pill">pre_*</span><span class="pill">kses</span>
+      <span class="pill">nonce</span><span class="pill">wp_rest</span><span class="pill">block themes</span>
+      <span class="pill">classic menus</span><span class="pill">Xdebug</span>
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  Generated 2026-11-08 · Source references verified against the local WordPress install at D:\xampp\htdocs\wordpress
+</footer>
+
+</body>
+</html>
