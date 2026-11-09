@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classic vs Block Themes &amp; the Elementor Takeover</title>
+<style>
+  :root {
+    --ink: #1a1a2e; --muted: #5c6270; --accent: #21759b; --accent2: #7a4fb3;
+    --bg: #f6f7f9; --card: #ffffff; --line: #e3e6ea; --code-bg: #101418; --code-ink: #d5e0ee;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.65; }
+  header.hero { background: linear-gradient(135deg, #101418 0%, #1d3a52 60%, #21759b 100%); color: #fff; padding: 48px 24px 40px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .hero h1 { margin: 0 0 8px; font-size: 30px; }
+  .hero p { margin: 4px 0; color: #cfe0ec; }
+  .hero .meta { font-size: 13px; color: #9db8ca; margin-top: 14px; }
+  main { padding: 32px 24px 64px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 26px 28px; margin: 22px 0; }
+  h2 { font-size: 20px; margin: 0 0 4px; color: var(--accent); border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+  h2 .num { display: inline-block; background: var(--accent); color: #fff; border-radius: 6px; font-size: 13px; padding: 2px 9px; margin-right: 10px; vertical-align: 3px; }
+  h3 { font-size: 16px; margin: 22px 0 6px; }
+  p, li { font-size: 14.5px; }
+  .takeaway { background: #eef6fa; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 14px 0; font-size: 14px; }
+  .warn { background: #fdf3e7; border-left: 4px solid #d98324; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #f0f3f6; }
+  code { font-family: Consolas, "Courier New", monospace; background: #eceff3; border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.55; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .file { color: #8a6d3b; font-family: Consolas, monospace; font-size: 12.5px; }
+  .pill { display: inline-block; background: #efe7f8; color: var(--accent2); border-radius: 20px; padding: 1px 10px; font-size: 12px; margin: 1px 2px; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 24px 0 40px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Classic vs Block Themes &amp; the Elementor Takeover</h1>
+    <p>Two theme models, one <code>the_content</code> filter — and why Elementor-rendered pages have no blocks, no anchors and no Block Hooks.</p>
+    <div class="meta">
+      Study date: 2026-11-09 &nbsp;·&nbsp; Verified on local install: Astra 4.12.7 (classic) · Twenty Twenty-Five (block) · Elementor free<br>
+      Method: read source with file:line evidence → inspect live page HTML/computed styles → confirm behavior under Xdebug
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <h2><span class="num">1</span>Classic vs Block Theme — Who Actually Builds the HTML</h2>
+    <p>The visible difference on a simple page can be zero (both output the same <code>&lt;table&gt;</code> for a table block), but the mechanism is completely different: a classic theme <em>executes PHP</em> to build the skeleton, a block theme <em>stores text containing block markers</em> and lets the interpreter render it.</p>
+    <table>
+      <tr><th>Dimension</th><th>Classic theme (Astra)</th><th>Block theme (TT5)</th></tr>
+      <tr><td>Skeleton owner</td><td>Theme PHP (<span class="file">header.php</span>, <span class="file">page.php</span>)</td><td>Core canvas <span class="file">wp-includes/template-canvas.php</span></td></tr>
+      <tr><td>Structure lives in</td><td>Code files + Customizer options</td><td>Block markup text (<span class="file">templates/*.html</span>, <span class="file">parts/*.html</span>, or DB overrides)</td></tr>
+      <tr><td>Nav data</td><td><code>nav_menu</code> taxonomy (terms + <code>nav_menu_item</code> posts)</td><td><code>wp_navigation</code> post type</td></tr>
+      <tr><td>Editing entry</td><td>Customizer + Appearance → Menus</td><td>Site Editor</td></tr>
+    </table>
+
+    <h3>Classic chain (Astra)</h3>
+    <p><span class="file">wp-includes/template-loader.php:132</span> does <code>include $template;</code> — with Astra active that is <span class="file">astra/page.php</span>. <span class="file">astra/header.php:61</span> calls <code>astra_header()</code>, which prints the builder markup; the whole <code>&lt;head&gt;/&lt;body&gt;</code> document is hand-written PHP. Menu locations come from <span class="file">astra/inc/admin-functions.php:28–43</span> (<code>register_nav_menus([primary, secondary_menu, mobile_menu])</code>) — that registration is what makes "Appearance → Menus" exist at all. The binding lives in the <code>theme_mods_astra</code> option: <code>nav_menu_locations = { primary: 59, secondary_menu: 59 }</code>.</p>
+
+    <h3>Block chain (Twenty Twenty-Five)</h3>
+    <p><span class="file">wp-includes/template.php:66</span> hands the resolved template to <code>locate_block_template()</code>. <span class="file">wp-includes/block-template.php:65</span> gates on <code>current_theme_supports('block-templates')</code> — for Astra this fails and the PHP path is returned untouched; that gate is the fork between the two worlds. For TT5 the block template's text is stored at <span class="file">block-template.php:110</span> in <code>$_wp_current_template_content</code>, and <span class="file">block-template.php:138</span> returns <span class="file">wp-includes/template-canvas.php</span> instead of any theme file. The canvas (<span class="file">template-canvas.php:12</span>) calls <code>get_the_block_template_html()</code> and builds the entire document itself.</p>
+    <p>The header itself is only references: <span class="file">twentytwentyfive/templates/page.html:1</span> → <code>&lt;!-- wp:template-part {"slug":"header"} /--&gt;</code>; <span class="file">twentytwentyfive/parts/header.html</span> is one line → <code>&lt;!-- wp:pattern {"slug":"twentytwentyfive/header"} /--&gt;</code>; the real blocks are in <span class="file">twentytwentyfive/patterns/header.php:15–32</span> — a group with <code>core/site-title</code> and <code>core/navigation</code> (line 24). That <code>wp:navigation</code> has no <code>ref</code>, so WordPress auto-created a <code>wp_navigation</code> post (id 4) and fell back to a page list.</p>
+    <div class="takeaway">One sentence: a classic header is PHP code running; a block header is text being interpreted. Classic keeps structure in code and data in options; block keeps structure itself in editable data.</div>
+  </section>
+
+  <section>
+    <h2><span class="num">2</span>The Slot in the Middle Belongs to Core, the Frame Belongs to the Theme</h2>
+    <p>Whatever the theme model, the body slot is produced by <code>core/post-content</code>: <span class="file">wp-includes/blocks/post-content.php:43</span> reads the stored <code>post_content</code>, and line 50 runs <code>apply_filters('the_content', $content)</code>. The theme template contributes the frame (<code>wp_head</code>, header, footer, global styles); core contributes the middle by executing the <code>the_content</code> pipeline. This is why "theme switch changed nothing" on a page whose content is not theme-dependent — the middle is identical, and a plain table has almost no theme-styled surface.</p>
+    <table>
+      <tr><th>Layer</th><th>Owner</th><th>Typical first priority</th></tr>
+      <tr><td>Document skeleton / header / footer</td><td>Theme (PHP or canvas + parts)</td><td>—</td></tr>
+      <tr><td>Content slot</td><td>Core <code>core/post-content</code></td><td><code>the_content</code> starts at 8</td></tr>
+      <tr><td>Who filters that content</td><td>Core defaults + plugins (registration order)</td><td>8 block hooks · 9 <code>do_blocks</code> · 10 typography · 11 shortcodes · 12 srcset · 20 smilies</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">3</span>Elementor: Compiled Content Published Through Its Own <code>the_content</code> Filter</h2>
+    <p>Elementor (free, no Theme Builder) does not store blocks. The design lives in postmeta <code>_elementor_data</code>; <code>post_content</code> is almost empty. At render time Elementor hooks <code>the_content</code> and <em>replaces the whole value</em> with its compiled HTML:</p>
+    <table>
+      <tr><th>Step</th><th>Location</th><th>What happens</th></tr>
+      <tr><td>Priority</td><td><span class="file">elementor/includes/frontend.php:33</span> + <span class="file">:324</span></td><td><code>THE_CONTENT_FILTER_PRIORITY = 9</code>; registers <code>apply_builder_in_content</code></td></tr>
+      <tr><td>Replace</td><td><span class="file">frontend.php:1105–1110</span></td><td><code>get_builder_content()</code> compiles elements; <code>$content = $builder_content</code> discards whatever earlier filters produced</td></tr>
+      <tr><td>Strip</td><td><span class="file">frontend.php:1328–1341</span></td><td>Removes <code>wpautop</code>, <code>shortcode_unautop</code>, <code>wptexturize</code> for the rest of this chain (restored on the next call at <span class="file">:1521–1527</span>)</td></tr>
+    </table>
+
+    <h3>Consequence 1 — no blocks in the output, so no block anchors</h3>
+    <p>The final HTML is Elementor's compiled markup, not block markup. <code>do_blocks</code> (priority 9) may run first in registration order, but its result is thrown away by the replacement. Anything that exists only in block form — block anchor IDs set in the block editor, block wrappers, block styles — simply is not part of an Elementor page.</p>
+
+    <h3>Consequence 2 — Block Hooks never survive</h3>
+    <p><code>apply_block_hooks_to_content_from_post_object</code> runs at priority 8, so it does fire first and can inject <code>&lt;!-- wp:plugin/block /--&gt;</code> markers. But at priority 9 <code>$content</code> is overwritten wholesale, so those injections are discarded. On Elementor-rendered pages Block Hooks are effectively a no-op.</p>
+
+    <h3>Consequence 3 — typography filters are skipped, but shortcodes/srcset still run</h3>
+    <p>The removal list is exactly three callbacks (<span class="file">frontend.php:1329–1333</span>): <code>wpautop</code>, <code>shortcode_unautop</code>, <code>wptexturize</code>. <code>do_shortcode</code> (11), <code>wp_filter_content_tags</code> (12) and <code>convert_smilies</code> (20) are not removed and still run on Elementor's HTML.</p>
+
+    <h3>Consequence 4 — the theme still owns the frame</h3>
+    <p>Elementor only owns the content slot. <code>wp_head</code>/<code>wp_footer</code>, theme CSS and the template's header/footer still come from the theme; the page template (Canvas vs Full Width) decides whether the theme frame participates at all.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">4</span>Case Study — the Two Navigation Systems That Look Like One</h2>
+    <p>With TT5 active and Elementor on the home page, the visible header navigation was an Elementor widget bound to <code>nav_menu</code> #59. The Site Editor's "Navigation" entity was a separate <code>wp_navigation</code> #4 created from the theme's header pattern with a page-list fallback. Editing #4 in the Site Editor saved fine and changed nothing on the front page — the theme's navigation block was simply not the one being rendered there.</p>
+    <table>
+      <tr><th>Thing on screen</th><th>Actual data</th><th>Edit entry</th></tr>
+      <tr><td>Home page header nav (Elementor)</td><td><code>nav_menu</code> #59</td><td>Appearance → Menus (classic) / DB</td></tr>
+      <tr><td>Site Editor "Navigation"</td><td><code>wp_navigation</code> #4</td><td>Site Editor</td></tr>
+      <tr><td>Page body on an Elementor page</td><td><code>_elementor_data</code> postmeta</td><td>Elementor editor</td></tr>
+      <tr><td>Page body on a normal page</td><td><code>post_content</code> block markup</td><td>Block editor</td></tr>
+    </table>
+    <div class="takeaway">When "saving succeeds but nothing changes", the first question is not "is the cache stale?" but "am I editing the data that the render path actually reads?" Elementor pages answer that question with <code>_elementor_data</code> + <code>nav_menu</code>, not with post_content blocks or <code>wp_navigation</code>.</div>
+  </section>
+
+  <section>
+    <h2><span class="num">5</span>Verifying It Yourself with Xdebug</h2>
+    <ul>
+      <li>Break at <span class="file">wp-includes/template-loader.php:132</span> and inspect <code>$template</code>: Astra → <span class="file">themes/astra/page.php</span>; TT5 → <span class="file">wp-includes/template-canvas.php</span> (the <code>.html</code> file is never included — it is read as a string).</li>
+      <li>Break on the <code>the_content</code> filter loop and expand <code>$wp_filter['the_content']</code>: it is a live subscription list, not the fixed core default list. Plugins add entries at runtime; equal priorities run in registration order.</li>
+      <li>On an Elementor page, step into <span class="file">frontend.php:1094</span> and watch <code>$content</code>: at line 1108 it is replaced by compiled HTML; <code>has_filter('the_content','wpautop')</code> is then false for the rest of the chain.</li>
+      <li>Trigger with <code>?XDEBUG_TRIGGER=1</code> (trigger mode on port 9003).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">6</span>Key Takeaways</h2>
+    <ul>
+      <li>Classic theme = PHP builds the document; block theme = core canvas interprets block text. The fork is <code>current_theme_supports('block-templates')</code> at <span class="file">block-template.php:65</span>.</li>
+      <li>Same nav menu exists in two incompatible models: <code>nav_menu</code> (classic) and <code>wp_navigation</code> (block). Theme switch swaps which model is live.</li>
+      <li><code>core/post-content</code> just reads <code>post_content</code> and runs <code>the_content</code> — it does not care what generated the markup.</li>
+      <li>Elementor publishes compiled HTML through <code>the_content</code> at priority 9 and discards earlier filter output → no blocks, no block anchors, Block Hooks are no-ops; <code>wpautop/texturize/shortcode_unautop</code> are stripped for that chain.</li>
+      <li>"Saved but nothing changed" = wrong data source, not necessarily caching. Check which layer the visible markup came from.</li>
+    </ul>
+    <p><span class="pill">template-canvas</span><span class="pill">block-templates support</span><span class="pill">nav_menu</span><span class="pill">wp_navigation</span><span class="pill">the_content pri 9</span><span class="pill">_elementor_data</span><span class="pill">block hooks pri 8</span><span class="pill">Xdebug</span></p>
+  </section>
+
+</main>
+
+<footer>
+  Generated 2026-11-09 · Source references verified against the local WordPress install at D:\xampp\htdocs\wordpress
+</footer>
+
+</body>
+</html>
