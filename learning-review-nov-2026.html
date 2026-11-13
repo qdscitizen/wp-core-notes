@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WordPress Core — Source-Level Learning Review · Nov 2026</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.7; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* Hero */
+  .hero { padding: 72px 0 48px; border-bottom: 1px solid var(--border); margin-bottom: 48px; }
+  .hero h1 { font-size: 2.3em; line-height: 1.2; letter-spacing: -0.02em; }
+  .hero h1 span { color: var(--accent); }
+  .hero .sub { color: var(--muted); margin-top: 14px; font-size: 1.05em; }
+  .hero .sub b { color: var(--text); }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-top: 36px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 16px; }
+  .stat .n { font-size: 1.9em; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .stat.g .n { color: var(--green); } .stat.o .n { color: var(--orange); } .stat.p .n { color: var(--purple); }
+  .stat .l { color: var(--muted); font-size: .82em; margin-top: 4px; }
+
+  /* Sections */
+  section { margin-top: 64px; }
+  section > h2 { font-size: 1.5em; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  section > h2 .idx { color: var(--muted); font-family: var(--mono); font-weight: 400; margin-right: 12px; }
+  section > h2 .tag { font-size: .55em; vertical-align: middle; background: var(--panel); border: 1px solid var(--border); color: var(--muted); padding: 2px 10px; border-radius: 20px; font-family: var(--mono); margin-left: 12px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 22px 26px; margin-bottom: 20px; }
+  .card h3 { font-size: 1.08em; color: var(--accent); margin-bottom: 12px; }
+
+  p { margin-bottom: 12px; }
+  ul, ol { margin: 0 0 14px 22px; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: .9em; background: rgba(110,118,129,.25); padding: 2px 6px; border-radius: 5px; color: #79c0ff; }
+  pre { background: #0a0e14; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: .86em; line-height: 1.6; margin: 14px 0 16px; color: #a5d6ff; }
+  pre .cmt { color: #6a9955; } pre .kw { color: #ff7b72; } pre .fn { color: #d2a8ff; } pre .str { color: #a5d6ff; }
+  .hl-green { color: var(--green); font-weight: 600; } .hl-red { color: var(--red); font-weight: 600; }
+  .hl-orange { color: var(--orange); font-weight: 600; } .hl-blue { color: var(--accent); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: .93em; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: .85em; text-transform: uppercase; letter-spacing: .04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(48,54,61,.6); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--orange); }
+
+  .quote { border-left: 3px solid var(--accent); padding: 12px 20px; margin: 16px 0; background: rgba(88,166,255,.06); border-radius: 0 8px 8px 0; }
+  .quote.interview { border-left-color: var(--green); background: rgba(63,185,80,.06); }
+  .quote .who { font-size: .8em; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+
+  footer { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border); color: var(--muted); font-size: .92em; }
+  footer .next { color: var(--text); }
+  a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hero">
+  <h1>WordPress Core — <span>Source-Level</span> Learning Review</h1>
+  <div class="sub">Nov 4 – 9, 2026 · Repositories: <b>wp-core-notes</b> · <b>wp-experiments</b> · <b>wpex-helpful-block</b><br>
+  Method: read source first, verify every AI claim against the code, ship something real.</div>
+  <div class="stats">
+    <div class="stat g"><div class="n">4</div><div class="l">repos created</div></div>
+    <div class="stat"><div class="n">1</div><div class="l">plugin shipped V0.1</div></div>
+    <div class="stat p"><div class="n">5</div><div class="l">interview answers delivered</div></div>
+    <div class="stat o"><div class="n">2</div><div class="l">AI claims corrected by source</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">DB tables examined live</div></div>
+    <div class="stat g"><div class="n">7/2</div><div class="l">jobs triaged / accepted</div></div>
+  </div>
+</div>
+
+<!-- 1 -->
+<section>
+  <h2><span class="idx">01</span>The the_content Pipeline <span class="tag">wp-includes/default-filters.php L201–210</span></h2>
+  <p>When a visitor opens a post, the stored content — plain text with block comments — is pulled from the database. When the template calls <code>the_content()</code>, the filter chain fires by priority:</p>
+  <table>
+    <tr><th>Priority</th><th>Worker</th><th>What it does</th></tr>
+    <tr><td>8</td><td><code>apply_block_hooks_to_content_from_post_object</code></td><td>Inserts hooked blocks into the parsed block tree</td></tr>
+    <tr><td>9</td><td><code>do_blocks</code></td><td>Parses block markup → HTML; <span class="hl-orange">also removes wpautop (see §04)</span></td></tr>
+    <tr><td>10</td><td><code>wptexturize</code></td><td>Curly quotes, ellipses (typography)</td></tr>
+    <tr><td>10</td><td><code>wpautop</code></td><td>Blank line → <code>&lt;p&gt;</code>, newline → <code>&lt;br&gt;</code></td></tr>
+    <tr><td>10</td><td><code>shortcode_unautop</code></td><td>Strips the <code>&lt;p&gt;</code> wpautop wrapped around shortcodes</td></tr>
+    <tr><td>10</td><td><code>prepend_attachment</code> / <code>wp_replace_insecure_home_url</code></td><td>Attachment pages / http→https fixes</td></tr>
+    <tr><td>11</td><td><code>do_shortcode</code></td><td>Expands <code>[shortcodes]</code> — must run AFTER wpautop</td></tr>
+    <tr><td>12</td><td><code>wp_filter_content_tags</code></td><td><code>loading="lazy"</code>, srcset on images</td></tr>
+    <tr><td>20</td><td><code>convert_smilies</code></td><td>:-) → emoji</td></tr>
+  </table>
+  <div class="quote interview">
+    <div class="who">Mock interview · delivered</div>
+    "Static blocks come from their saved markup, dynamic blocks run their <code>render_callback</code> — and when a page is built with Elementor, it bypasses this pipeline entirely, so Block Hooks don't apply there."
+  </div>
+</section>
+
+<!-- 2 -->
+<section>
+  <h2><span class="idx">02</span>Block Hooks API <span class="tag">shipped in wpex-helpful-block V0.1</span></h2>
+  <div class="card">
+    <h3>The rule that ships</h3>
+<pre>{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "wpex/helpful",
+  <span class="kw">"blockHooks"</span>: { <span class="str">"core/post-content"</span>: <span class="str">"lastChild"</span> }  <span class="cmt">// camelCase — see the trap below</span>
+}</pre>
+    <p>Registered via <code>register_block_type_from_metadata()</code> + a <code>render_callback</code>. The block auto-appends to <b>every post</b> — zero configuration, works under classic <i>and</i> block themes (both paths run through the same <code>the_content</code> chain).</p>
+  </div>
+  <div class="card">
+    <h3>Position mapping — the silent trap (blocks.php L719–740)</h3>
+<pre>$position_mappings = array(
+    'before'     => 'before',
+    'after'      => 'after',
+    <span class="hl-green">'firstChild'</span> => 'first_child',
+    <span class="hl-green">'lastChild'</span>  => 'last_child',   <span class="cmt">// camelCase keys ONLY</span>
+);
+if ( ! isset( $position_mappings[ $position ] ) ) {
+    continue;   <span class="cmt">// ← invalid values are silently skipped. No warning, no log.</span>
+}</pre>
+    <p><span class="hl-red">Live bug we hit:</span> writing <code>"last_child"</code> (snake_case) passed registration but produced an <b>empty block_hooks array at runtime</b>. Diagnosed by dumping <code>WP_Block_Type_Registry</code> at runtime, fixed by reading L738.</p>
+  </div>
+  <div class="card">
+    <h3>The four "won't hook" categories — 16-character mnemonic</h3>
+    <table>
+      <tr><th>Category</th><th>Case</th><th>Evidence</th></tr>
+      <tr><td><b>写错跳过</b> invalid value → skipped</td><td><code>last_child</code> snake_case</td><td>hit live (this bug)</td></tr>
+      <tr><td><b>官方压制</b> before/after on the post-content wrapper is suppressed</td><td><code>core/post-content: "after"</code></td><td>blocks.php L1279–1292, trac #63287</td></tr>
+      <tr><td><b>体系没有</b> template-level hooks need a block theme</td><td>classic themes have no block templates</td><td>theme dir comparison (TT5 vs Astra)</td></tr>
+      <tr><td><b>构建器绕开</b> page builders replace the pipeline</td><td>Elementor pages have no block tree — no anchor exists</td><td>mock interview answer</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- 3 -->
+<section>
+  <h2><span class="idx">03</span>Security — The Four Gates <span class="tag">shipped in the vote endpoint</span></h2>
+  <p>Every field in the request lifecycle gets a gate, and each gate blocks a specific attack:</p>
+  <table>
+    <tr><th>Lifecycle</th><th>Gate</th><th>Blocks which attack</th></tr>
+    <tr><td>Firing the request</td><td><code>nonce</code> (X-WP-Nonce header)</td><td><span class="hl-red">CSRF</span> — forged submissions</td></tr>
+    <tr><td>Before reaching the endpoint</td><td><code>permission_callback</code> → <code>current_user_can()</code></td><td><span class="hl-red">Privilege escalation</span></td></tr>
+    <tr><td>Input</td><td><code>absint()</code> for numbers / <code>sanitize_text_field()</code> for text / kses for rich text</td><td><span class="hl-red">Dirty data & injection input</span></td></tr>
+    <tr><td>Database write</td><td><code>$wpdb->prepare()</code></td><td><span class="hl-red">SQL injection</span></td></tr>
+    <tr><td>Output</td><td><code>esc_html()</code> / <code>esc_attr()</code></td><td><span class="hl-red">XSS</span></td></tr>
+  </table>
+  <p><b>Nuance that earns points:</b> public operations (anonymous voting) use <code>__return_true</code> + nonce; admin operations require capability checks. Gate strength follows <i>the nature of the operation</i>. And field type picks the sanitizer: <code>absint</code> for numbers, <code>sanitize_text_field</code> for text — three guards, three sheaths, never mixed.</p>
+  <div class="quote">
+    <div class="who">Live DB evidence — SHOW INDEX FROM wp_postmeta (12,670 rows)</div>
+    <code>PRIMARY</code> (meta_id) · <code style="color:var(--green)">post_id</code> INDEXED · <code style="color:var(--green)">meta_key</code> INDEXED (191) · <span class="hl-red">meta_value — NO INDEX (LONGTEXT)</span>
+  </div>
+</section>
+
+<!-- 4 -->
+<section>
+  <h2><span class="idx">04</span>wpautop — Corrected by Reading Source <span class="tag">blocks.php L2528–2552</span></h2>
+  <div class="card">
+    <h3>The rule</h3>
+    <p>Blank line → <code>&lt;p&gt;</code>. Single newline → <code>&lt;br&gt;</code>. (Not "beatify" — <b>beautify</b>. Third time this typo appeared. It's in the permanent log now.)</p>
+  </div>
+  <div class="card">
+    <h3>What do_blocks actually does when content contains blocks</h3>
+<pre><span class="cmt">// blocks.php L2526–2529 — inside do_blocks():</span>
+<span class="kw">if</span> ( <span class="kw">false</span> !== $priority && doing_filter( <span class="str">'the_content'</span> ) && has_blocks( $content ) ) {
+    remove_filter( <span class="str">'the_content'</span>, <span class="str">'wpautop'</span>, $priority );
+    add_filter( <span class="str">'the_content'</span>, <span class="str">'_restore_wpautop_hook'</span>, $priority + <span class="hl-blue">1</span> );
+}
+
+<span class="cmt">// L2545 — the restore hook:</span>
+<span class="kw">function</span> <span class="fn">_restore_wpautop_hook</span>( $content ) {
+    add_filter( <span class="str">'the_content'</span>, <span class="str">'wpautop'</span>, $current_priority - <span class="hl-blue">1</span> );  <span class="cmt">// back to 10 — but 10 already passed this round</span>
+    remove_filter( <span class="str">'the_content'</span>, <span class="str">'_restore_wpautop_hook'</span>, $current_priority );
+    <span class="kw">return</span> $content;   <span class="cmt">// unmodified — the hook only restores the chain state</span>
+}</pre>
+  </div>
+  <div class="quote">
+    <div class="who">Correction issued — against me, by the learner, with source</div>
+    I (the AI) initially taught that "dynamic block output must be compact to survive wpautop". The learner opened blocks.php, found the remove/restore logic, and disproved it: <span class="hl-green">when content contains blocks, wpautop is removed from the chain entirely — dynamic block output is structurally immune.</span> Compact output remains good hygiene, but it is not load-bearing. wpautop issues only exist in <b>non-block, classic content</b> (classic-editor posts, shortcodes in plain text).
+  </div>
+</section>
+
+<!-- 5 -->
+<section>
+  <h2><span class="idx">05</span>The Evolution Strategy: Meta Now, Table Later <span class="tag">read one, sort the other</span></h2>
+  <table>
+    <tr><th>Operation</th><th>Index path</th><th>Speed</th></tr>
+    <tr><td><code>get_post_meta( 40, 'wpex_helpful_up' )</code></td><td>WHERE post_id = 40 AND meta_key = '…' → <span class="ok">indexed hit, one row</span></td><td><span class="ok">fast ✅ (V0.1 does only this)</span></td></tr>
+    <tr><td><code>ORDER BY meta_value+0 DESC</code> (a "Top 10 helpful" page)</td><td>meta_value is LONGTEXT, no index → read-sort-everything</td><td><span class="bad">slow ❌ (triggers the migration)</span></td></tr>
+  </table>
+  <div class="quote interview">
+    <div class="who">Interview answer, final form</div>
+    "For V0.1, post meta is the right call: the counts are per-post data, and I only read them by post ID, which hits the indexed lookup. I'd move to a custom table <b>only when a feature needs to query or sort by vote count across all posts</b> — then I'd migrate the counts into a dedicated table with proper indexes. So: <b>post meta now, custom table when querying becomes a feature.</b>"
+  </div>
+</section>
+
+<!-- 6 -->
+<section>
+  <h2><span class="idx">06</span>WooCommerce Data Architecture — One save(), Three Tables <span class="tag">verified live: DESCRIBE wp_wc_product_meta_lookup</span></h2>
+<pre>$product->set_price( 99 );   <span class="cmt">// memory only — the DB doesn't know yet</span>
+$product->save();
+  ├ ① wp_posts                    <span class="cmt">// identity & main content — the anchor</span>
+  ├ ② wp_postmeta                 <span class="cmt">// elastic attributes (_price, _sku, plugin data)</span>
+  └ ③ wp_wc_product_meta_lookup   <span class="cmt">// query copy: min_price DECIMAL(19,4) + MUL index, stock_quantity + MUL…</span></pre>
+  <p><b>Two layers by design:</b> posts/meta are the <b>content layer</b> (the source of truth — WP ecosystem compatible: wp_query, REST, SEO plugins all read posts). The lookup table is the <b>query layer</b> (a denormalized copy: trade write overhead for indexed filtering and sorting). The frontend price filter hits <code>lookup.min_price</code> — a real DECIMAL column with an index — never the LONGTEXT meta_value.</p>
+  <p>Frontend mirror: main database + search index. You write once, queries run against the indexed copy. When our helpful block grows a "most helpful posts" page, the official lookup-table pattern is the reference implementation sitting in our own database.</p>
+</section>
+
+<!-- 7 -->
+<section>
+  <h2><span class="idx">07</span>Classic vs Block Themes — Read From Both Theme Directories <span class="tag">TT5 active · Astra inspected</span></h2>
+  <div class="card">
+    <h3>Same page, two species (single post template)</h3>
+<pre><span class="cmt">// classic (astra): single.php — PHP + HTML mixed</span>
+get_header();
+&lt;div <span class="kw">id</span>=<span class="str">"primary"</span>&gt;
+    &lt;?php <span class="fn">astra_content_loop</span>(); ?&gt;   <span class="cmt">// internally calls the_content()</span>
+&lt;/div&gt;
+get_footer();
+
+<span class="cmt">// block (twentytwentyfive): templates/single.html — pure block markup</span>
+&lt;!-- wp:template-part {<span class="str">"slug"</span>:<span class="str">"header"</span>} /--&gt;
+&lt;!-- wp:post-title /--&gt;
+&lt;!-- wp:post-content /--&gt;     <span class="cmt">// ← = the_content(), same pipeline underneath</span>
+&lt;!-- wp:template-part {<span class="str">"slug"</span>:<span class="str">"footer"</span>} /--&gt;</pre>
+  </div>
+  <table>
+    <tr><th></th><th>Classic</th><th>Block</th></tr>
+    <tr><td>Template species</td><td>PHP files</td><td>HTML with block markup</td></tr>
+    <tr><td>Change structure</td><td>edit code</td><td>drag blocks in Site Editor → file auto-updates</td></tr>
+    <tr><td>Customization</td><td>3 separate tools: Customizer / Menus / Widgets</td><td>one Site Editor + theme.json design system</td></tr>
+    <tr><td>Content rendering</td><td colspan="2"><b>both converge on the the_content pipeline</b> — plugins are theme-independent (verified: the helpful block renders under both)</td></tr>
+  </table>
+  <div class="quote interview">
+    <div class="who">Selection logic — "who maintains it afterwards"</div>
+    "New build + client self-editing → <b>block theme</b>: the Site Editor is built exactly for that. Old, large site → <b>stay classic</b>: migrating risks losing headers, footers, sidebars — the cost outweighs the benefits. Needs heavy custom logic with a developer on board → classic gives more control."
+  </div>
+</section>
+
+<!-- 8 -->
+<section>
+  <h2><span class="idx">08</span>Mock Interview Log <span class="tag">EN output · 4 questions + 2 follow-ups</span></h2>
+  <table>
+    <tr><th>#</th><th>Question</th><th>Extras surfaced by the learner</th><th>Content</th></tr>
+    <tr><td>Q1</td><td>What happens to post content before it appears?</td><td>static vs dynamic block rendering</td><td><span class="ok">85</span></td></tr>
+    <tr><td>Q1-fu</td><td>Follow-up: your Block Hooks plugin vs an Elementor page?</td><td>append at later priority + plain HTML + <code>_elementor_edit_mode</code> meta detection</td><td><span class="ok">80 → pass</span></td></tr>
+    <tr><td>Q2</td><td>Security gates when saving a custom field?</td><td>permission_callback awareness, absint by field type</td><td><span class="warn">70</span></td></tr>
+    <tr><td>Q2-fu</td><td>Follow-up: anything to do on output?</td><td>esc functions → XSS — full four-gate chain delivered</td><td><span class="ok">90</span></td></tr>
+    <tr><td>Q46</td><td>Classic vs block themes + recommendation?</td><td>migration section-loss risk, "who maintains afterwards" dimension</td><td><span class="warn">80</span></td></tr>
+  </table>
+  <p>Every answer was built from things the learner had <b>actually shipped or touched that week</b> — not from flashcards.</p>
+</section>
+
+<!-- 9 -->
+<section>
+  <h2><span class="idx">09</span>Methodology — Verify AI With Source Code <span class="tag">the core discipline</span></h2>
+  <div class="card">
+    <h3>Case 1 — the camelCase trap</h3>
+    <p>AI (Doubao) proposed <code>"core/post-content": "after"</code>; AI (Hermes) proposed <code>"last_child"</code>. Both wrong. Source (blocks.php L719–724): the key is <code class="hl-green">lastChild</code>. The learner's plugin shipped broken → diagnosed at runtime → fixed by source. <b>Verdict: source 1 – 0 – 0 (Doubao / Hermes / source).</b></p>
+  </div>
+  <div class="card">
+    <h3>Case 2 — the wpautop correction issued TO the AI</h3>
+    <p>Hermes taught "dynamic block output must be compact or wpautop breaks it", then criticized the learner's remove/restore answer as wrong. The learner opened blocks.php, found L2528–2529, and disproved the teaching. Verdict corrected: <span class="hl-green">block content is structurally immune to wpautop</span>; compact output is hygiene, not armor.</p>
+  </div>
+  <div class="card">
+    <h3>Case 3 — the Upwork triage</h3>
+    <p>Seven jobs across two days. Decision rule run on every one: <b>quote ÷ scope = real hourly rate; total spent ÷ hires = client tier</b>. Result: GHL integration accepted ($30–45/hr, WP+API exact fit, contract-to-hire); five killed — a $35 marketplace MVP (a $2,000 build), a $10 full-store rebuild (client lifetime spend $25, avg $6.25/hire), a $20 slider config (zero code growth), an AskAgento case study (fabricated-revenue red line).</p>
+  </div>
+</section>
+
+<footer>
+  <p><b>Next:</b> <span class="next">README for wpex-helpful-block (first section = the pipeline answer above) · Q3 meta_query performance · voice simulation × 3 rounds · GHL client response pending.</span></p>
+  <p style="margin-top:10px">The discipline stands: <b style="color:var(--accent)">read source first, verify every AI claim, ship something real.</b><br>
+  Generated as part of wp-core-notes — the reading-notes repository of qdscitizen.</p>
+</footer>
+
+</div>
+</body>
+</html>
