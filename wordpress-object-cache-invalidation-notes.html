@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WP Object Cache Invalidation — Meta Cache vs Query Cache</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #f5f6f8; color: #1f2430;
+    line-height: 1.75; font-size: 16px;
+    padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 6px; letter-spacing: .3px; }
+  .sub { color: #6b7280; font-size: 14px; margin-bottom: 28px; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 22px 26px; margin-bottom: 18px;
+  }
+  h2 {
+    font-size: 19px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 2px solid #eef0f3; color: #111827;
+    display: flex; align-items: center; gap: 8px;
+  }
+  h2 .num {
+    background: #2563eb; color: #fff; font-size: 13px;
+    width: 22px; height: 22px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 16px; margin: 18px 0 8px; color: #111827; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 6px; }
+  code {
+    background: #eef2f7; color: #b91c1c;
+    padding: 1px 6px; border-radius: 4px;
+    font-family: Consolas, Monaco, monospace; font-size: 14px;
+  }
+  pre {
+    background: #1e2430; color: #e5e7eb;
+    padding: 16px 18px; border-radius: 8px;
+    overflow-x: auto; margin: 10px 0 14px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 13.5px; line-height: 1.65;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  pre .cmt { color: #7b8794; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 15px; }
+  th { background: #f0f3f8; text-align: left; padding: 9px 12px; border: 1px solid #e2e6ec; font-weight: 600; }
+  td { padding: 9px 12px; border: 1px solid #e2e6ec; vertical-align: top; }
+  .highlight { background: #eff6ff; border-left: 4px solid #2563eb; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .warn { background: #fef3f2; border-left: 4px solid #dc2626; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .ok { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; margin-right: 6px; font-weight: 600; }
+  .tag.high { background: #fee2e2; color: #b91c1c; }
+  .tag.mid { background: #fef9c3; color: #a16207; }
+  .tag.low { background: #e0f2fe; color: #0369a1; }
+  .flow { font-family: Consolas, monospace; font-size: 14px; line-height: 2; color: #374151; }
+  .flow b { color: #2563eb; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>WP Object Cache Invalidation</h1>
+  <div class="sub">Meta cache vs query cache · last_changed version numbers · Redis &amp; object-cache.php — verified against WordPress 7.0.2 source (file:line evidence)</div>
+
+  <!-- ============ TL;DR ============ -->
+  <div class="card">
+    <h2><span class="num">0</span>TL;DR</h2>
+    <p><b>One meta write touches two different caches:</b> it deletes that post's meta cache entry, and it bumps a site-wide version number used by every query cache. The first is cheap to rebuild (one indexed row). The second is expensive to rebuild (a full list query).</p>
+    <div class="flow">
+      wp_postmeta table
+      <br>├── <b>meta cache</b> (group: post_meta, key = post_id) → invalidated by precise delete
+      <br>└── <b>query cache</b> (group: post-queries, key = query args) → invalidated by version number
+    </div>
+  </div>
+
+  <!-- ============ 1 ============ -->
+  <div class="card" id="s1">
+    <h2><span class="num">1</span>What happens the moment you call update_post_meta</h2>
+    <p>One line of code does three things:</p>
+    <pre><code><span class="cmt">// What you write:</span>
+update_post_meta( $post_id, 'count', 5 );
+
+<span class="cmt">// What actually happens:</span>
+1. UPDATE wp_postmeta ...                      <span class="cmt">// what you wanted</span>
+2. wp_cache_delete( $post_id, 'post_meta' )    <span class="cmt">// delete this post's meta cache</span>
+3. Fires updated_post_meta hook
+   → wp_cache_set_posts_last_changed()
+   → wp_cache_set_last_changed( 'posts' )      <span class="cmt">// bump the version number</span></code></pre>
+    <p>Source: <code>wp-includes/meta.php:329</code>, <code>wp-includes/post.php:8410</code></p>
+  </div>
+
+  <!-- ============ 2 ============ -->
+  <div class="card" id="s2">
+    <h2><span class="num">2</span>Two caches, two invalidation paths</h2>
+    <table>
+      <tr><th style="width:22%"></th><th>Meta cache</th><th>Query cache</th></tr>
+      <tr><td>Cache group</td><td><code>post_meta</code></td><td><code>post-queries</code></td></tr>
+      <tr><td>Cache key</td><td>post_id (one entry per post)</td><td>query args (one entry per query)</td></tr>
+      <tr><td>Invalidated by</td><td><b>Precise delete</b> — wp_cache_delete</td><td><b>Version comparison</b> — last_changed</td></tr>
+      <tr><td>Affects</td><td>get_post_meta</td><td>WP_Query</td></tr>
+      <tr><td>Rebuild cost</td><td>One indexed row (sub-millisecond)</td><td>joins + sorting + count (expensive)</td></tr>
+    </table>
+    <div class="warn"><b>Common misconception:</b> "if last_changed changed, get_post_meta must re-query too." Wrong — <b>get_post_meta never reads last_changed</b>. It only checks whether its own per-post meta cache entry was deleted.</div>
+  </div>
+
+  <!-- ============ 3 ============ -->
+  <div class="card" id="s3">
+    <h2><span class="num">3</span>How WP_Query knows its cache is stale (salted cache, WP 6.9+)</h2>
+    <p>Since 6.9 WordPress uses a "salted cache": <b>the key stays stable, the version number is stored inside the cached value, and it is compared on read</b>.</p>
+    <pre><code><span class="cmt">// On write: the version is stored inside the entry</span>
+wp_cache_set_salted( $key, $data, 'post-queries', $last_changed );
+<span class="cmt">// → stored as: { data: [...], salt: "1700000000" }</span>
+
+<span class="cmt">// On read: version mismatch = treated as a miss</span>
+wp_cache_get_salted( $key, 'post-queries', $last_changed );
+if ( $salt !== $cache['salt'] ) return false;
+<span class="cmt">// → miss → run the SQL → store again with the new version</span></code></pre>
+    <p>Source: <code>wp-includes/cache-compat.php:214 / 244</code> (<code>@since 6.9.0</code>)</p>
+    <div class="highlight"><b>Key point:</b> the cache entry is not deleted — it is still sitting in Redis. It is simply ignored on read because its "version stamp" no longer matches. Think of a stale check in React Query.</div>
+    <p>Before 6.9, the version was hashed into the key instead — every bump created a new key and orphaned the old one. 6.9 switched to a stable key with version comparison, so Redis doesn't accumulate zombie keys.</p>
+  </div>
+
+  <!-- ============ 4 ============ -->
+  <div class="card" id="s4">
+    <h2><span class="num">4</span>Why list queries are expensive to rebuild</h2>
+    <pre><code><span class="cmt">// Single meta: hits the (post_id, meta_key) index, one row</span>
+SELECT meta_value FROM wp_postmeta
+WHERE post_id = 123 AND meta_key = 'count';
+
+<span class="cmt">// List query: multiple joins + sorting + pagination + a count query</span>
+SELECT wp_posts.* FROM wp_posts
+  LEFT JOIN wp_term_relationships ...
+  LEFT JOIN wp_term_taxonomy ...
+WHERE post_type = 'post' AND post_status = 'publish'
+ORDER BY post_date DESC LIMIT 10 OFFSET 0;
+<span class="cmt">// plus a separate COUNT(*) for the total page count</span></code></pre>
+    <p><b>Frontend analogy:</b> <code>byId[123].count</code> (O(1)) versus <code>all.filter().sort().slice()</code> (O(n log n)).</p>
+  </div>
+
+  <!-- ============ 5 ============ -->
+  <div class="card" id="s5">
+    <h2><span class="num">5</span>When to move to a dedicated table</h2>
+    <table>
+      <tr><th>Requirement</th><th>Decision</th></tr>
+      <tr><td>Store / read a single counter only</td><td>Post meta is fine</td></tr>
+      <tr><td><b>Sort or aggregate by value</b> (top-voted, totals)</td><td>Dedicated table — <code>meta_value</code> is LONGTEXT and unindexed</td></tr>
+      <tr><td><b>Atomic increment</b> under concurrency</td><td>Dedicated table — <code>votes INT</code> increment is atomic in the database; update_post_meta is read-modify-write and loses votes under races</td></tr>
+      <tr><td>High-frequency writes polluting the site-wide query cache</td><td>Dedicated table — writes don't touch the posts version number</td></tr>
+    </table>
+    <div class="ok"><b>Interview line:</b> "post meta now, custom table when querying becomes a feature." Don't say "I'd just write raw SQL to bypass the hooks" — that works around the problem; migrating solves it.</div>
+  </div>
+
+  <!-- ============ 6 ============ -->
+  <div class="card" id="s6">
+    <h2><span class="num">6</span>What Redis and object-cache.php actually are</h2>
+    <h3>Default: the object cache lives for one request</h3>
+    <p>WordPress ships with an in-process object cache (a PHP array inside <code>WP_Object_Cache</code>). When the request ends, the array is destroyed — <b>nothing is shared between visitors</b>. So by default, query caches only serve repeated queries within the same request.</p>
+    <h3>What Redis changes</h3>
+    <p>Drop a file at <code>wp-content/object-cache.php</code> (a drop-in). WordPress loads it early during bootstrap, and it takes over every <code>wp_cache_*</code> function — moving the cache from process memory to a Redis server.</p>
+    <table>
+      <tr><th></th><th>Default</th><th>object-cache.php + Redis</th></tr>
+      <tr><td>Storage</td><td>PHP memory array</td><td>Redis server</td></tr>
+      <tr><td>Cross-request</td><td>❌ destroyed with the request</td><td>✅ shared by all visitors</td></tr>
+      <tr><td>List cache value</td><td>Almost none</td><td>Visitor A warms it, visitor B hits it</td></tr>
+    </table>
+    <div class="highlight"><b>The three drop-ins:</b> <code>object-cache.php</code> (object cache), <code>advanced-cache.php</code> (page cache), <code>db.php</code> (database layer). All load before regular plugins.</div>
+    <div class="warn"><b>Key consequence:</b> the "votes thrash the list cache" problem is <b>only serious on sites with Redis</b> — because the cache is shared across requests. Without Redis, the cache never outlives a request, so invalidation costs nothing.</div>
+  </div>
+
+  <!-- ============ 7 ============ -->
+  <div class="card" id="s7">
+    <h2><span class="num">7</span>Checklist — verified against source</h2>
+    <table>
+      <tr><th style="width:8%">#</th><th>Statement</th><th style="width:20%">Verdict</th></tr>
+      <tr><td>1</td><td>add/update/delete_meta deletes that post's meta cache</td><td>✅ true — <code>meta.php</code> calls wp_cache_delete directly</td></tr>
+      <tr><td>2</td><td>get_post_meta must re-query; WP_Query depends on the version number and re-queries when it changes</td><td>✅ true — two independent paths</td></tr>
+      <tr><td>3</td><td>Version numbers are useful for your own custom caches</td><td>✅ true — your own group, your own salt</td></tr>
+      <tr><td>4</td><td>Dedicated tables exist to stop WP_Query re-querying after a meta update</td><td>⚠️ half true — the main reasons are querying/sorting/aggregation (unindexed meta_value) and atomic increments; cache pollution is the secondary reason</td></tr>
+    </table>
+  </div>
+
+  <!-- ============ 8 ============ -->
+  <div class="card" id="s8">
+    <h2><span class="num">8</span>How this is tested in interviews</h2>
+
+    <h3><span class="tag high">HIGH</span>1. "How does WordPress keep the object cache fresh after content changes?"</h3>
+    <p><i>"Meta writes fire hooks like updated_post_meta, and core updates a last_changed timestamp in the posts cache group. WP_Query uses that timestamp — since 6.9 it is stored as a salt inside the cache entry and compared on read — so every old query cache entry becomes stale at once. It's a version number instead of deleting entries one by one. The per-post meta cache is separate: it's deleted precisely by post ID."</i></p>
+
+    <h3><span class="tag high">HIGH</span>2. "Why do I see stale data after updating meta directly in the database?"</h3>
+    <p><i>"Because the standard API wasn't used — raw SQL doesn't fire the meta hooks. The per-post meta cache wasn't deleted and last_changed wasn't bumped, so both caches keep serving old data. The fix is to call clean_post_cache( $post_id ) after the raw query."</i></p>
+
+    <h3><span class="tag mid">MID</span>3. "A post goes viral and the whole site slows down — why?"</h3>
+    <p><i>"Every vote calls update_post_meta, which bumps the last_changed version, so every query cache entry on the site goes stale at once. On a site with Redis the shared list cache keeps getting invalidated and the database gets hit repeatedly. For high-frequency counters I'd move them to a dedicated table so writes don't touch the posts cache group."</i> — this answer is the differentiator level.</p>
+
+    <h3><span class="tag mid">MID</span>4. "What's the difference between page cache and object cache?"</h3>
+    <p><i>"Page cache stores the finished HTML and serves it before PHP boots — it lives in the advanced-cache.php drop-in. Object cache stores query results and data inside PHP, so the page is still assembled each time, but the database isn't hit. With Redis the object cache is shared across requests; without it, it only lives for one request."</i></p>
+
+    <h3><span class="tag low">DEEP</span>5. "What are drop-ins?"</h3>
+    <p><i>"Special files in wp-content that load before regular plugins — object-cache.php for Redis, advanced-cache.php for page caching, db.php for the database layer."</i></p>
+
+    <div class="ok" style="margin-top:18px">
+      <b>The winning point:</b> these questions are not about memorizing parameters — they test whether you know that <b>two invalidation paths run side by side</b>: precise deletes (single objects) and version numbers (query results). Most candidates only know one. The moment you say "get_post_meta never reads last_changed," the interviewer knows you've read core.
+    </div>
+  </div>
+
+  <div class="sub" style="text-align:center; margin-top:32px;">
+    Verified against WordPress 7.0.2 — wp-includes/meta.php, class-wp-query.php, cache-compat.php, post.php
+  </div>
+
+</div>
+</body>
+</html>
