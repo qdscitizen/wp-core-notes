@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>WP 缓存机制 · 面试梳理</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #f5f6f8; color: #1f2430;
+    line-height: 1.75; font-size: 16px;
+    padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 {
+    font-size: 26px; margin-bottom: 6px; letter-spacing: .5px;
+  }
+  .sub { color: #6b7280; font-size: 14px; margin-bottom: 28px; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 22px 26px; margin-bottom: 18px;
+  }
+  h2 {
+    font-size: 19px; margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 2px solid #eef0f3; color: #111827;
+    display: flex; align-items: center; gap: 8px;
+  }
+  h2 .num {
+    background: #2563eb; color: #fff; font-size: 13px;
+    width: 22px; height: 22px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 16px; margin: 18px 0 8px; color: #111827; }
+  p { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin-bottom: 6px; }
+  code {
+    background: #eef2f7; color: #b91c1c;
+    padding: 1px 6px; border-radius: 4px;
+    font-family: Consolas, Monaco, monospace; font-size: 14px;
+  }
+  pre {
+    background: #1e2430; color: #e5e7eb;
+    padding: 16px 18px; border-radius: 8px;
+    overflow-x: auto; margin: 10px 0 14px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 13.5px; line-height: 1.65;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  pre .cmt { color: #7b8794; }
+  pre .hl { color: #7dd3fc; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 15px;
+  }
+  th {
+    background: #f0f3f8; text-align: left; padding: 9px 12px;
+    border: 1px solid #e2e6ec; font-weight: 600;
+  }
+  td { padding: 9px 12px; border: 1px solid #e2e6ec; vertical-align: top; }
+  .highlight {
+    background: #eff6ff; border-left: 4px solid #2563eb;
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0;
+  }
+  .warn {
+    background: #fef3f2; border-left: 4px solid #dc2626;
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0;
+  }
+  .ok {
+    background: #f0fdf4; border-left: 4px solid #16a34a;
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0;
+  }
+  .tag {
+    display: inline-block; font-size: 12px; padding: 1px 8px;
+    border-radius: 999px; margin-right: 6px; font-weight: 600;
+  }
+  .tag.high { background: #fee2e2; color: #b91c1c; }
+  .tag.mid { background: #fef9c3; color: #a16207; }
+  .tag.low { background: #e0f2fe; color: #0369a1; }
+  .flow { font-family: Consolas, monospace; font-size: 14px; line-height: 2; color: #374151; }
+  .flow b { color: #2563eb; }
+  .toc { font-size: 14px; color: #4b5563; }
+  .toc a { color: #2563eb; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>WordPress 缓存机制 · 面试梳理</h1>
+  <div class="sub">主题：meta 缓存 / 查询缓存 / 版本号 / Redis / 面试怎么考</div>
+
+  <!-- ============ 总纲 ============ -->
+  <div class="card">
+    <h2><span class="num">0</span>一句话总纲</h2>
+    <p><b>写一次 meta，会动两套缓存：</b>删掉这篇文章的 meta 缓存，同时推动全站查询缓存的版本号。前者代价小（重查一行），后者代价大（重查全站列表）。</p>
+    <div class="flow">
+      wp_postmeta 表
+      <br>├── <b>meta 缓存</b>（组 post_meta，key = post_id）→ 靠精确删除失效
+      <br>└── <b>查询缓存</b>（组 post-queries，key 含查询参数）→ 靠版本号失效
+    </div>
+  </div>
+
+  <!-- ============ 1 ============ -->
+  <div class="card" id="s1">
+    <h2><span class="num">1</span>update_post_meta 那一刻，发生了什么</h2>
+    <p>一行代码，干了三件事：</p>
+    <pre><code><span class="cmt">// 你写的：</span>
+update_post_meta( $post_id, 'count', 5 );
+
+<span class="cmt">// 实际发生：</span>
+1. UPDATE wp_postmeta ...                        <span class="cmt">// 你要的</span>
+2. wp_cache_delete( $post_id, 'post_meta' )      <span class="cmt">// 删本条 meta 缓存</span>
+3. 触发 updated_post_meta 钩子
+   → wp_cache_set_posts_last_changed()
+   → wp_cache_set_last_changed( 'posts' )        <span class="cmt">// 版本号 +1</span></code></pre>
+    <p>源码位置（WP 7.0）：<code>wp-includes/meta.php:329</code>、<code>wp-includes/post.php:8410</code></p>
+  </div>
+
+  <!-- ============ 2 ============ -->
+  <div class="card" id="s2">
+    <h2><span class="num">2</span>两套缓存，两条失效路径</h2>
+    <table>
+      <tr><th style="width:22%">对比</th><th>meta 缓存</th><th>查询缓存</th></tr>
+      <tr><td>缓存组</td><td><code>post_meta</code></td><td><code>post-queries</code></td></tr>
+      <tr><td>缓存 key</td><td>post_id（整篇 meta 一条）</td><td>查询参数（列表查询一条）</td></tr>
+      <tr><td>失效方式</td><td><b>精确删除</b> wp_cache_delete</td><td><b>版本号对比</b> last_changed</td></tr>
+      <tr><td>谁失效</td><td>get_post_meta</td><td>WP_Query</td></tr>
+      <tr><td>重查代价</td><td>索引一行（毫秒）</td><td>join + 排序 + count（重）</td></tr>
+    </table>
+    <div class="warn"><b>常见误区：</b>「版本号变了，get_post_meta 也要重查」。不对——<b>get_post_meta 不看版本号</b>，只看自己那篇的 meta 缓存有没有被删。</div>
+  </div>
+
+  <!-- ============ 3 ============ -->
+  <div class="card" id="s3">
+    <h2><span class="num">3</span>版本号机制：WP_Query 怎么知道缓存过期了</h2>
+    <p>WP 6.9 起用「salted cache」：<b>key 不变，版本号存在缓存值里，读的时候对比</b>。</p>
+    <pre><code><span class="cmt">// 写缓存时：版本号塞进值里</span>
+wp_cache_set_salted( $key, $data, 'post-queries', $last_changed );
+<span class="cmt">// → 实际存：{ data: [...], salt: "1700000000" }</span>
+
+<span class="cmt">// 读缓存时：版本对不上 = 当没有</span>
+wp_cache_get_salted( $key, 'post-queries', $last_changed );
+if ( $salt !== $cache['salt'] ) return false;
+<span class="cmt">// → miss → 执行 SQL 重新查 → 用新版本号写回</span></code></pre>
+    <p>源码：<code>wp-includes/cache-compat.php:214 / 244</code>（@since 6.9.0）</p>
+    <div class="highlight"><b>要点：</b>缓存条目没被删，它还在。只是「出厂日期对不上」，读的时候不敢用。就像 React Query 的 stale 判断。</div>
+    <p>6.8 及以前是「版本号拼进 key」——key 变了、旧 key 变垃圾。6.9 改成同 key 比版本，Redis 不会堆僵尸 key。</p>
+  </div>
+
+  <!-- ============ 4 ============ -->
+  <div class="card" id="s4">
+    <h2><span class="num">4</span>为什么列表查询贵</h2>
+    <pre><code><span class="cmt">// 单条 meta：走 (post_id, meta_key) 索引，命中一行</span>
+SELECT meta_value FROM wp_postmeta
+WHERE post_id = 123 AND meta_key = 'count';
+
+<span class="cmt">// 列表查询：多表 join + 排序 + 分页 + 还要算总数</span>
+SELECT wp_posts.* FROM wp_posts
+  LEFT JOIN wp_term_relationships ...
+  LEFT JOIN wp_term_taxonomy ...
+WHERE post_type = 'post' AND post_status = 'publish'
+ORDER BY post_date DESC LIMIT 10 OFFSET 0;
+<span class="cmt">// 外加一条 COUNT(*) 算总页数</span></code></pre>
+    <p><b>前端类比：</b><code>byId[123].count</code>（O(1)）对比 <code>all.filter().sort().slice()</code>（O(n log n)）。</p>
+  </div>
+
+  <!-- ============ 5 ============ -->
+  <div class="card" id="s5">
+    <h2><span class="num">5</span>什么时候该建独立表</h2>
+    <table>
+      <tr><th>需求</th><th>结论</th></tr>
+      <tr><td>只存 / 读单篇计数</td><td>meta 就够</td></tr>
+      <tr><td>要<b>按值排序 / 聚合</b>（热门榜、总票数）</td><td>必须独立表（meta_value 是 LONGTEXT，无索引）</td></tr>
+      <tr><td>要<b>原子自增</b>（高并发投票）</td><td>独立表 <code>votes INT</code> 自增最干净（update_post_meta 是读-改-写，会丢票）</td></tr>
+      <tr><td>高频写入污染全站查询缓存</td><td>独立表（写入不碰 posts 版本号）</td></tr>
+    </table>
+    <div class="ok"><b>面试口径：</b>「post meta now, custom table when querying becomes a feature.」——不说「我直接写 SQL 绕开」，那是绕过问题；迁表是解决问题。</div>
+  </div>
+
+  <!-- ============ 6 ============ -->
+  <div class="card" id="s6">
+    <h2><span class="num">6</span>Redis 和 object-cache.php 是什么</h2>
+    <h3>默认情况：对象缓存只活一个请求</h3>
+    <p>WP 自带的对象缓存是 <b>PHP 进程内的一个数组</b>（WP_Object_Cache）。请求结束，数组销毁——<b>访客之间不共享</b>。所以默认情况下，列表查询缓存基本只服务同一个请求内的重复查询。</p>
+    <h3>Redis 改变什么</h3>
+    <p>在 <code>wp-content/object-cache.php</code> 放一个文件（drop-in），WP 启动时早期加载它，接管所有 <code>wp_cache_*</code> 函数 → 缓存从「进程内存」搬到「Redis 服务器」。</p>
+    <table>
+      <tr><th></th><th>默认</th><th>装了 object-cache.php + Redis</th></tr>
+      <tr><td>存储位置</td><td>PHP 内存数组</td><td>Redis 服务器</td></tr>
+      <tr><td>跨请求</td><td>❌ 请求结束即销毁</td><td>✅ 所有访客共享</td></tr>
+      <tr><td>列表缓存效果</td><td>基本没用</td><td>访客 A 查过，访客 B 直接命中</td></tr>
+    </table>
+    <div class="highlight"><b>三个 drop-in：</b><code>object-cache.php</code>（对象缓存）、<code>advanced-cache.php</code>（页面缓存）、<code>db.php</code>（数据库层）。它们都在普通插件之前加载。</div>
+    <div class="warn"><b>关键结论：</b>「投票打穿列表缓存」这个性能问题，<b>只在装了 Redis 的站才严重</b>——因为缓存是跨请求共享的。没装 Redis 的站，缓存本来就活不过一个请求，失效无所谓。</div>
+  </div>
+
+  <!-- ============ 7 ============ -->
+  <div class="card" id="s7">
+    <h2><span class="num">7</span>你自己的 4 条总结 · 核对</h2>
+    <table>
+      <tr><th style="width:8%">#</th><th>你的说法</th><th style="width:12%">判定</th></tr>
+      <tr><td>1</td><td>meta 方法增删改会删除本条缓存</td><td>✅ 对（meta.php 里直接 wp_cache_delete）</td></tr>
+      <tr><td>2</td><td>get_post_meta 要重新查库；WP_Query 依赖版本号命中，版本变就重查</td><td>✅ 对（两套并行）</td></tr>
+      <tr><td>3</td><td>版本号对自定义缓存有用</td><td>✅ 对（自己的 group 自己管版本）</td></tr>
+      <tr><td>4</td><td>独立表是为了避免 update_meta 后 WP_Query 重查</td><td>⚠️ 只是一半。主因是查询/排序/聚合（meta_value 无索引）+ 原子自增；避免缓存污染是第二理由</td></tr>
+    </table>
+  </div>
+
+  <!-- ============ 8 ============ -->
+  <div class="card" id="s8">
+    <h2><span class="num">8</span>面试怎么考这部分</h2>
+
+    <h3><span class="tag high">高频</span>1. 「How does WordPress keep the object cache fresh after content changes?」</h3>
+    <p>答：<i>「Meta writes fire hooks like updated_post_meta, and core updates a last_changed timestamp in the posts cache group. WP_Query builds its cache key from that timestamp — or in 6.9+, stores it as a salt and compares on read — so every old query cache entry becomes invalid at once. It's a version number instead of deleting entries one by one. And per-object meta cache is separate: it's deleted precisely by post ID.」</i></p>
+
+    <h3><span class="tag high">高频</span>2. 「Why do I see stale data after I updated meta directly in the database?」</h3>
+    <p>答：<i>「Because the standard API wasn't used — raw SQL doesn't fire the meta hooks. The per-post meta cache wasn't deleted, and last_changed wasn't bumped, so both caches keep serving old data. The fix is to call clean_post_cache( $post_id ) after the raw query.」</i></p>
+
+    <h3><span class="tag mid">中频</span>3. 「A post goes viral and the whole site slows down — why?」</h3>
+    <p>答：<i>「Every vote calls update_post_meta, which bumps the last_changed version — so every WP_Query cache entry on the site becomes stale at once. On a site with Redis, that means the shared list cache keeps getting invalidated and the database gets hit over and over. For high-frequency counters I'd move them to a dedicated table so writes don't touch the posts cache group.」</i>（这题答出来是加分档）</p>
+
+    <h3><span class="tag mid">中频</span>4. 「What's the difference between page cache and object cache?」</h3>
+    <p>答：<i>「Page cache stores the finished HTML and serves it before PHP even boots — it lives in a drop-in, advanced-cache.php. Object cache stores query results and data inside PHP, so the page is still built each time, but the database isn't hit. With Redis, object cache is shared across requests; without it, it only lives for one request.」</i></p>
+
+    <h3><span class="tag low">深挖</span>5. 「What are drop-ins?」</h3>
+    <p>答：<i>「Special files in wp-content that load before regular plugins — object-cache.php for Redis, advanced-cache.php for page caching, db.php for the database layer.」</i></p>
+
+    <div class="ok" style="margin-top:18px">
+      <b>满分心法：</b>这组题的分不在背参数，在说清「<b>两条失效路径并存</b>」——精确删除（单对象）+ 版本号（查询结果）。大多数候选人只知道其中一个。你能说出「get_post_meta 不看版本号」，面试官就知道你读过 core。
+    </div>
+  </div>
+
+  <div class="sub" style="text-align:center; margin-top:32px;">
+    文件名：WP缓存机制-面试梳理.html · 生成于 2026-11-13
+  </div>
+
+</div>
+</body>
+</html>

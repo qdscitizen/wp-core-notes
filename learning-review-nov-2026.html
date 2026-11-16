@@ -1,285 +1,232 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WordPress Core — Source-Level Learning Review · Nov 2026</title>
+<title>WordPress 内核源码级学习复盘 · 2026 年 11 月</title>
 <style>
   :root {
-    --bg: #0d1117; --panel: #161b22; --border: #30363d;
-    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
-    --green: #3fb950; --orange: #d29922; --red: #f85149; --purple: #bc8cff;
-    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --ink: #1a1a2e; --muted: #5c6270; --accent: #21759b; --accent2: #7a4fb3;
+    --bg: #f6f7f9; --card: #ffffff; --line: #e3e6ea; --code-bg: #101418; --code-ink: #d5e0ee;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; line-height: 1.7; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 80px; }
-
-  /* Hero */
-  .hero { padding: 72px 0 48px; border-bottom: 1px solid var(--border); margin-bottom: 48px; }
-  .hero h1 { font-size: 2.3em; line-height: 1.2; letter-spacing: -0.02em; }
-  .hero h1 span { color: var(--accent); }
-  .hero .sub { color: var(--muted); margin-top: 14px; font-size: 1.05em; }
-  .hero .sub b { color: var(--text); }
-
-  /* Stats */
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-top: 36px; }
-  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 16px; }
-  .stat .n { font-size: 1.9em; font-weight: 700; color: var(--accent); font-family: var(--mono); }
-  .stat.g .n { color: var(--green); } .stat.o .n { color: var(--orange); } .stat.p .n { color: var(--purple); }
-  .stat .l { color: var(--muted); font-size: .82em; margin-top: 4px; }
-
-  /* Sections */
-  section { margin-top: 64px; }
-  section > h2 { font-size: 1.5em; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
-  section > h2 .idx { color: var(--muted); font-family: var(--mono); font-weight: 400; margin-right: 12px; }
-  section > h2 .tag { font-size: .55em; vertical-align: middle; background: var(--panel); border: 1px solid var(--border); color: var(--muted); padding: 2px 10px; border-radius: 20px; font-family: var(--mono); margin-left: 12px; }
-
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 22px 26px; margin-bottom: 20px; }
-  .card h3 { font-size: 1.08em; color: var(--accent); margin-bottom: 12px; }
-
-  p { margin-bottom: 12px; }
-  ul, ol { margin: 0 0 14px 22px; }
-  li { margin-bottom: 6px; }
-  code { font-family: var(--mono); font-size: .9em; background: rgba(110,118,129,.25); padding: 2px 6px; border-radius: 5px; color: #79c0ff; }
-  pre { background: #0a0e14; border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: .86em; line-height: 1.6; margin: 14px 0 16px; color: #a5d6ff; }
-  pre .cmt { color: #6a9955; } pre .kw { color: #ff7b72; } pre .fn { color: #d2a8ff; } pre .str { color: #a5d6ff; }
-  .hl-green { color: var(--green); font-weight: 600; } .hl-red { color: var(--red); font-weight: 600; }
-  .hl-orange { color: var(--orange); font-weight: 600; } .hl-blue { color: var(--accent); font-weight: 600; }
-
-  table { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-size: .93em; }
-  th { text-align: left; color: var(--muted); font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: .85em; text-transform: uppercase; letter-spacing: .04em; }
-  td { padding: 10px 14px; border-bottom: 1px solid rgba(48,54,61,.6); vertical-align: top; }
-  tr:last-child td { border-bottom: none; }
-  .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--orange); }
-
-  .quote { border-left: 3px solid var(--accent); padding: 12px 20px; margin: 16px 0; background: rgba(88,166,255,.06); border-radius: 0 8px 8px 0; }
-  .quote.interview { border-left-color: var(--green); background: rgba(63,185,80,.06); }
-  .quote .who { font-size: .8em; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-
-  footer { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border); color: var(--muted); font-size: .92em; }
-  footer .next { color: var(--text); }
-  a { color: var(--accent); text-decoration: none; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.75; }
+  header.hero { background: linear-gradient(135deg, #101418 0%, #1d3a52 60%, #21759b 100%); color: #fff; padding: 48px 24px 40px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .hero h1 { margin: 0 0 8px; font-size: 28px; }
+  .hero p { margin: 4px 0; color: #cfe0ec; }
+  .hero .meta { font-size: 13px; color: #9db8ca; margin-top: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-top: 28px; }
+  .stat { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); border-radius: 10px; padding: 14px 16px; }
+  .stat .n { font-size: 22px; font-weight: 700; color: #7dd3fc; }
+  .stat .l { color: #9db8ca; font-size: 12.5px; margin-top: 2px; }
+  main { padding: 32px 24px 64px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 26px 28px; margin: 22px 0; }
+  h2 { font-size: 20px; margin: 0 0 4px; color: var(--accent); border-bottom: 2px solid var(--line); padding-bottom: 8px; }
+  h2 .num { display: inline-block; background: var(--accent); color: #fff; border-radius: 6px; font-size: 13px; padding: 2px 9px; margin-right: 10px; vertical-align: 3px; }
+  h3 { font-size: 16px; margin: 22px 0 6px; }
+  p, li { font-size: 15px; }
+  .takeaway { background: #eef6fa; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 14px 0; font-size: 14.5px; }
+  .warn { background: #fdf3e7; border-left: 4px solid #d98324; }
+  .ok { background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #f0f3f6; }
+  code { font-family: Consolas, "Courier New", monospace; background: #eceff3; border-radius: 4px; padding: 1px 6px; font-size: 13.5px; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  pre code { background: none; color: inherit; padding: 0; }
+  .file { color: #8a6d3b; font-family: Consolas, monospace; font-size: 12.5px; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 24px 0 40px; }
+  .quote { font-style: italic; color: #374151; background: #fafafa; border: 1px dashed #d1d5db; border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<div class="hero">
-  <h1>WordPress Core — <span>Source-Level</span> Learning Review</h1>
-  <div class="sub">Nov 4 – 9, 2026 · Repositories: <b>wp-core-notes</b> · <b>wp-experiments</b> · <b>wpex-helpful-block</b><br>
-  Method: read source first, verify every AI claim against the code, ship something real.</div>
-  <div class="stats">
-    <div class="stat g"><div class="n">4</div><div class="l">repos created</div></div>
-    <div class="stat"><div class="n">1</div><div class="l">plugin shipped V0.1</div></div>
-    <div class="stat p"><div class="n">5</div><div class="l">interview answers delivered</div></div>
-    <div class="stat o"><div class="n">2</div><div class="l">AI claims corrected by source</div></div>
-    <div class="stat"><div class="n">3</div><div class="l">DB tables examined live</div></div>
-    <div class="stat g"><div class="n">7/2</div><div class="l">jobs triaged / accepted</div></div>
+<header class="hero">
+  <div class="wrap">
+    <h1>WordPress 内核源码级学习复盘</h1>
+    <p>11 月 4 日 – 9 日 · 仓库：wp-core-notes · wp-experiments · wpex-helpful-block</p>
+    <div class="meta">方法：先读源码，再用代码验证每条 AI 说法，最后交付一个真实作品。</div>
+    <div class="stats">
+      <div class="stat"><div class="n">4</div><div class="l">仓库建立</div></div>
+      <div class="stat"><div class="n">1</div><div class="l">插件 V0.1 发布</div></div>
+      <div class="stat"><div class="n">5</div><div class="l">面试回答交付</div></div>
+      <div class="stat"><div class="n">2</div><div class="l">被源码纠正的 AI 说法</div></div>
+      <div class="stat"><div class="n">3</div><div class="l">实测的数据库表</div></div>
+      <div class="stat"><div class="n">7/2</div><div class="l">筛单/接单</div></div>
+    </div>
   </div>
-</div>
+</header>
 
-<!-- 1 -->
-<section>
-  <h2><span class="idx">01</span>The the_content Pipeline <span class="tag">wp-includes/default-filters.php L201–210</span></h2>
-  <p>When a visitor opens a post, the stored content — plain text with block comments — is pulled from the database. When the template calls <code>the_content()</code>, the filter chain fires by priority:</p>
-  <table>
-    <tr><th>Priority</th><th>Worker</th><th>What it does</th></tr>
-    <tr><td>8</td><td><code>apply_block_hooks_to_content_from_post_object</code></td><td>Inserts hooked blocks into the parsed block tree</td></tr>
-    <tr><td>9</td><td><code>do_blocks</code></td><td>Parses block markup → HTML; <span class="hl-orange">also removes wpautop (see §04)</span></td></tr>
-    <tr><td>10</td><td><code>wptexturize</code></td><td>Curly quotes, ellipses (typography)</td></tr>
-    <tr><td>10</td><td><code>wpautop</code></td><td>Blank line → <code>&lt;p&gt;</code>, newline → <code>&lt;br&gt;</code></td></tr>
-    <tr><td>10</td><td><code>shortcode_unautop</code></td><td>Strips the <code>&lt;p&gt;</code> wpautop wrapped around shortcodes</td></tr>
-    <tr><td>10</td><td><code>prepend_attachment</code> / <code>wp_replace_insecure_home_url</code></td><td>Attachment pages / http→https fixes</td></tr>
-    <tr><td>11</td><td><code>do_shortcode</code></td><td>Expands <code>[shortcodes]</code> — must run AFTER wpautop</td></tr>
-    <tr><td>12</td><td><code>wp_filter_content_tags</code></td><td><code>loading="lazy"</code>, srcset on images</td></tr>
-    <tr><td>20</td><td><code>convert_smilies</code></td><td>:-) → emoji</td></tr>
-  </table>
-  <div class="quote interview">
-    <div class="who">Mock interview · delivered</div>
-    "Static blocks come from their saved markup, dynamic blocks run their <code>render_callback</code> — and when a page is built with Elementor, it bypasses this pipeline entirely, so Block Hooks don't apply there."
-  </div>
-</section>
+<main class="wrap">
 
-<!-- 2 -->
-<section>
-  <h2><span class="idx">02</span>Block Hooks API <span class="tag">shipped in wpex-helpful-block V0.1</span></h2>
-  <div class="card">
-    <h3>The rule that ships</h3>
-<pre>{
+  <section>
+    <h2><span class="num">01</span>the_content 流水线</h2>
+    <p class="file">wp-includes/default-filters.php L201–210</p>
+    <p>访客打开一篇文章时，存储的内容 —— 带块注释的纯文本 —— 从数据库取出。模板调用 <code>the_content()</code>，过滤链按优先级依次触发：</p>
+    <table>
+      <tr><th>优先级</th><th>执行者</th><th>做什么</th></tr>
+      <tr><td>8</td><td><code>apply_block_hooks_to_content_from_post_object</code></td><td>把钩子块插进解析后的块树</td></tr>
+      <tr><td>9</td><td><code>do_blocks</code></td><td>解析块标记 → HTML；同时摘掉 wpautop（见第 04 节）</td></tr>
+      <tr><td>10</td><td><code>wptexturize</code></td><td>弯引号、省略号（排版）</td></tr>
+      <tr><td>10</td><td><code>wpautop</code></td><td>空行 → <code>&lt;p&gt;</code>，换行 → <code>&lt;br&gt;</code></td></tr>
+      <tr><td>10</td><td><code>shortcode_unautop</code></td><td>剥掉 wpautop 包在短码外的 <code>&lt;p&gt;</code></td></tr>
+      <tr><td>10</td><td><code>prepend_attachment</code> / <code>wp_replace_insecure_home_url</code></td><td>附件页 / http→https 修正</td></tr>
+      <tr><td>11</td><td><code>do_shortcode</code></td><td>展开短码 —— 必须排在 wpautop 之后</td></tr>
+      <tr><td>12</td><td><code>wp_filter_content_tags</code></td><td>图片 lazy loading、srcset</td></tr>
+      <tr><td>20</td><td><code>convert_smilies</code></td><td>:-) → 表情图</td></tr>
+    </table>
+    <div class="quote">模拟面试已交付："静态块来自存储的标记，动态块执行 render_callback —— 而 Elementor 搭建的页面完全绕开这条流水线，所以 Block Hooks 在那里不生效。"</div>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span>Block Hooks API（wpex-helpful-block V0.1 已发布）</h2>
+    <p>能上线的规则：</p>
+    <pre><code>{
   "$schema": "https://schemas.wp.org/trunk/block.json",
   "apiVersion": 3,
   "name": "wpex/helpful",
-  <span class="kw">"blockHooks"</span>: { <span class="str">"core/post-content"</span>: <span class="str">"lastChild"</span> }  <span class="cmt">// camelCase — see the trap below</span>
-}</pre>
-    <p>Registered via <code>register_block_type_from_metadata()</code> + a <code>render_callback</code>. The block auto-appends to <b>every post</b> — zero configuration, works under classic <i>and</i> block themes (both paths run through the same <code>the_content</code> chain).</p>
-  </div>
-  <div class="card">
-    <h3>Position mapping — the silent trap (blocks.php L719–740)</h3>
-<pre>$position_mappings = array(
+  "blockHooks": {
+    "core/post-content": "lastChild"   <span class="cmt">// camelCase —— 见下面的坑</span>
+  }
+}</code></pre>
+    <p>通过 <code>register_block_type_from_metadata()</code> + <code>render_callback</code> 注册。块自动追加到每篇文章 —— 零配置，经典主题和块主题都生效（两条路径都汇进同一条 the_content 链）。</p>
+
+    <h3>位置映射 —— 静默陷阱（blocks.php L719–740）</h3>
+    <pre><code>$position_mappings = array(
     'before'     => 'before',
     'after'      => 'after',
-    <span class="hl-green">'firstChild'</span> => 'first_child',
-    <span class="hl-green">'lastChild'</span>  => 'last_child',   <span class="cmt">// camelCase keys ONLY</span>
+    'firstChild' => 'first_child',
+    'lastChild'  => 'last_child',   <span class="cmt">// 键只认 camelCase</span>
 );
 if ( ! isset( $position_mappings[ $position ] ) ) {
-    continue;   <span class="cmt">// ← invalid values are silently skipped. No warning, no log.</span>
-}</pre>
-    <p><span class="hl-red">Live bug we hit:</span> writing <code>"last_child"</code> (snake_case) passed registration but produced an <b>empty block_hooks array at runtime</b>. Diagnosed by dumping <code>WP_Block_Type_Registry</code> at runtime, fixed by reading L738.</p>
-  </div>
-  <div class="card">
-    <h3>The four "won't hook" categories — 16-character mnemonic</h3>
+    continue;   <span class="cmt">// ← 非法值被静默跳过。没警告、没日志。</span>
+}</code></pre>
+    <p><strong>亲历的 bug：</strong>写 <code>"last_child"</code>（snake_case）能通过注册，但运行时 <code>block_hooks</code> 数组为空。诊断方式：运行时 dump <code>WP_Block_Type_Registry</code>，再读 L738 源码修好。</p>
+
+    <h3>四类「挂不上」—— 16 字口诀</h3>
     <table>
-      <tr><th>Category</th><th>Case</th><th>Evidence</th></tr>
-      <tr><td><b>写错跳过</b> invalid value → skipped</td><td><code>last_child</code> snake_case</td><td>hit live (this bug)</td></tr>
-      <tr><td><b>官方压制</b> before/after on the post-content wrapper is suppressed</td><td><code>core/post-content: "after"</code></td><td>blocks.php L1279–1292, trac #63287</td></tr>
-      <tr><td><b>体系没有</b> template-level hooks need a block theme</td><td>classic themes have no block templates</td><td>theme dir comparison (TT5 vs Astra)</td></tr>
-      <tr><td><b>构建器绕开</b> page builders replace the pipeline</td><td>Elementor pages have no block tree — no anchor exists</td><td>mock interview answer</td></tr>
+      <tr><th>类别</th><th>情况</th><th>证据</th></tr>
+      <tr><td>写错跳过</td><td>非法位置值被静默跳过</td><td><code>last_child</code> snake_case 实测踩中</td></tr>
+      <tr><td>官方压制</td><td>post-content 包装块的 before/after 被核心吃掉</td><td><code>core/post-content: "after"</code> · blocks.php L1279–1292 · trac #63287</td></tr>
+      <tr><td>体系没有</td><td>模板级 hook 需要块主题</td><td>经典主题没有块模板（TT5 vs Astra 目录对比）</td></tr>
+      <tr><td>构建器绕开</td><td>页面构建器替换流水线</td><td>Elementor 页面没有块树 —— 没有锚点</td></tr>
     </table>
-  </div>
-</section>
+  </section>
 
-<!-- 3 -->
-<section>
-  <h2><span class="idx">03</span>Security — The Four Gates <span class="tag">shipped in the vote endpoint</span></h2>
-  <p>Every field in the request lifecycle gets a gate, and each gate blocks a specific attack:</p>
-  <table>
-    <tr><th>Lifecycle</th><th>Gate</th><th>Blocks which attack</th></tr>
-    <tr><td>Firing the request</td><td><code>nonce</code> (X-WP-Nonce header)</td><td><span class="hl-red">CSRF</span> — forged submissions</td></tr>
-    <tr><td>Before reaching the endpoint</td><td><code>permission_callback</code> → <code>current_user_can()</code></td><td><span class="hl-red">Privilege escalation</span></td></tr>
-    <tr><td>Input</td><td><code>absint()</code> for numbers / <code>sanitize_text_field()</code> for text / kses for rich text</td><td><span class="hl-red">Dirty data & injection input</span></td></tr>
-    <tr><td>Database write</td><td><code>$wpdb->prepare()</code></td><td><span class="hl-red">SQL injection</span></td></tr>
-    <tr><td>Output</td><td><code>esc_html()</code> / <code>esc_attr()</code></td><td><span class="hl-red">XSS</span></td></tr>
-  </table>
-  <p><b>Nuance that earns points:</b> public operations (anonymous voting) use <code>__return_true</code> + nonce; admin operations require capability checks. Gate strength follows <i>the nature of the operation</i>. And field type picks the sanitizer: <code>absint</code> for numbers, <code>sanitize_text_field</code> for text — three guards, three sheaths, never mixed.</p>
-  <div class="quote">
-    <div class="who">Live DB evidence — SHOW INDEX FROM wp_postmeta (12,670 rows)</div>
-    <code>PRIMARY</code> (meta_id) · <code style="color:var(--green)">post_id</code> INDEXED · <code style="color:var(--green)">meta_key</code> INDEXED (191) · <span class="hl-red">meta_value — NO INDEX (LONGTEXT)</span>
-  </div>
-</section>
+  <section>
+    <h2><span class="num">03</span>安全 —— 四道门（投票端点已发布）</h2>
+    <p>请求生命周期每个环节一道门，每道门拦一种攻击：</p>
+    <table>
+      <tr><th>生命周期</th><th>门</th><th>拦什么攻击</th></tr>
+      <tr><td>发出请求</td><td>nonce（X-WP-Nonce 头）</td><td>CSRF —— 伪造提交</td></tr>
+      <tr><td>到达端点前</td><td><code>permission_callback</code> → <code>current_user_can()</code></td><td>越权</td></tr>
+      <tr><td>输入</td><td><code>absint()</code>（数字）/ <code>sanitize_text_field()</code>（文本）/ kses（富文本）</td><td>脏数据与注入输入</td></tr>
+      <tr><td>写库</td><td><code>$wpdb-&gt;prepare()</code></td><td>SQL 注入</td></tr>
+      <tr><td>输出</td><td><code>esc_html()</code> / <code>esc_attr()</code></td><td>XSS</td></tr>
+    </table>
+    <div class="takeaway">加分细节：公开操作（匿名投票）用 <code>__return_true</code> + nonce；管理操作要求 capability 检查 —— <strong>门的强度跟着操作性质走</strong>。字段类型选清洗函数：数字用 absint、文本用 sanitize_text_field —— 三种守卫三条路，绝不混用。</div>
+    <p><strong>实测证据 —— SHOW INDEX FROM wp_postmeta（12,670 行）：</strong><code>PRIMARY (meta_id)</code> · <code>post_id</code> 有索引 · <code>meta_key</code> 有索引（191）· <code>meta_value</code> <strong>无索引（LONGTEXT）</strong></p>
+  </section>
 
-<!-- 4 -->
-<section>
-  <h2><span class="idx">04</span>wpautop — Corrected by Reading Source <span class="tag">blocks.php L2528–2552</span></h2>
-  <div class="card">
-    <h3>The rule</h3>
-    <p>Blank line → <code>&lt;p&gt;</code>. Single newline → <code>&lt;br&gt;</code>. (Not "beatify" — <b>beautify</b>. Third time this typo appeared. It's in the permanent log now.)</p>
-  </div>
-  <div class="card">
-    <h3>What do_blocks actually does when content contains blocks</h3>
-<pre><span class="cmt">// blocks.php L2526–2529 — inside do_blocks():</span>
-<span class="kw">if</span> ( <span class="kw">false</span> !== $priority && doing_filter( <span class="str">'the_content'</span> ) && has_blocks( $content ) ) {
-    remove_filter( <span class="str">'the_content'</span>, <span class="str">'wpautop'</span>, $priority );
-    add_filter( <span class="str">'the_content'</span>, <span class="str">'_restore_wpautop_hook'</span>, $priority + <span class="hl-blue">1</span> );
+  <section>
+    <h2><span class="num">04</span>wpautop —— 被源码纠正的一次</h2>
+    <p class="file">blocks.php L2528–2552</p>
+    <p><strong>规则：</strong>空行 → <code>&lt;p&gt;</code>，单换行 → <code>&lt;br&gt;</code>。（不是 "beatify" —— 是 <strong>beautify</strong>。这个错拼第三次出现了，已进永久错题本。）</p>
+
+    <h3>内容里含块时，do_blocks 到底干了什么</h3>
+    <pre><code><span class="cmt">// blocks.php L2526–2529 —— do_blocks() 内部：</span>
+if ( false !== $priority && doing_filter('the_content') && has_blocks($content) ) {
+    remove_filter('the_content', 'wpautop', $priority);
+    add_filter('the_content', '_restore_wpautop_hook', $priority + 1);
 }
+<span class="cmt">// L2545 —— 恢复钩子：</span>
+function _restore_wpautop_hook( $content ) {
+    add_filter('the_content', 'wpautop', $current_priority - 1);   <span class="cmt">// 放回 10 —— 但本轮已经过了</span>
+    remove_filter('the_content', '_restore_wpautop_hook', $current_priority);
+    return $content;   <span class="cmt">// 原样返回 —— 它只负责恢复链状态</span>
+}</code></pre>
+    <div class="takeaway warn"><strong>一次由学习者发起、用源码推翻 AI 的纠正：</strong>我（AI）最初教「动态块输出必须紧凑，否则会被 wpautop 破坏」。学习者打开 blocks.php 找到摘除/恢复逻辑，推翻了这个说法：<strong>内容含块时，wpautop 被整条摘出链外 —— 动态块输出天然免疫。</strong>输出紧缩短是卫生习惯，不是保命符；wpautop 的坑只存在于无块的经典内容里（经典编辑器文章、纯文本短码）。</div>
+  </section>
 
-<span class="cmt">// L2545 — the restore hook:</span>
-<span class="kw">function</span> <span class="fn">_restore_wpautop_hook</span>( $content ) {
-    add_filter( <span class="str">'the_content'</span>, <span class="str">'wpautop'</span>, $current_priority - <span class="hl-blue">1</span> );  <span class="cmt">// back to 10 — but 10 already passed this round</span>
-    remove_filter( <span class="str">'the_content'</span>, <span class="str">'_restore_wpautop_hook'</span>, $current_priority );
-    <span class="kw">return</span> $content;   <span class="cmt">// unmodified — the hook only restores the chain state</span>
-}</pre>
-  </div>
-  <div class="quote">
-    <div class="who">Correction issued — against me, by the learner, with source</div>
-    I (the AI) initially taught that "dynamic block output must be compact to survive wpautop". The learner opened blocks.php, found the remove/restore logic, and disproved it: <span class="hl-green">when content contains blocks, wpautop is removed from the chain entirely — dynamic block output is structurally immune.</span> Compact output remains good hygiene, but it is not load-bearing. wpautop issues only exist in <b>non-block, classic content</b> (classic-editor posts, shortcodes in plain text).
-  </div>
-</section>
+  <section>
+    <h2><span class="num">05</span>演进策略：现在用 meta，将来才迁表</h2>
+    <p>一条命令读得快，另一条命令排序就慢：</p>
+    <table>
+      <tr><th>操作</th><th>索引路径</th><th>速度</th></tr>
+      <tr><td><code>get_post_meta( 40, 'wpex_helpful_up' )</code></td><td>WHERE post_id = 40 AND meta_key = '…' → 索引命中一行</td><td>快 ✅（V0.1 只做这件事）</td></tr>
+      <tr><td><code>ORDER BY meta_value+0 DESC</code>（做一个「最有用 Top 10」页）</td><td>meta_value 是 LONGTEXT 无索引 → 读出全部再排序</td><td>慢 ❌（触发迁表）</td></tr>
+    </table>
+    <div class="quote">面试标准答案最终版："V0.1 用 post meta 是正确选择：计数是每篇文章自己的数据，我只按 post ID 读，走的是索引查找。只有当某个功能需要跨文章按票数查询或排序时，我才把计数迁进带正确索引的独立表。所以：post meta now, custom table when querying becomes a feature."</div>
+  </section>
 
-<!-- 5 -->
-<section>
-  <h2><span class="idx">05</span>The Evolution Strategy: Meta Now, Table Later <span class="tag">read one, sort the other</span></h2>
-  <table>
-    <tr><th>Operation</th><th>Index path</th><th>Speed</th></tr>
-    <tr><td><code>get_post_meta( 40, 'wpex_helpful_up' )</code></td><td>WHERE post_id = 40 AND meta_key = '…' → <span class="ok">indexed hit, one row</span></td><td><span class="ok">fast ✅ (V0.1 does only this)</span></td></tr>
-    <tr><td><code>ORDER BY meta_value+0 DESC</code> (a "Top 10 helpful" page)</td><td>meta_value is LONGTEXT, no index → read-sort-everything</td><td><span class="bad">slow ❌ (triggers the migration)</span></td></tr>
-  </table>
-  <div class="quote interview">
-    <div class="who">Interview answer, final form</div>
-    "For V0.1, post meta is the right call: the counts are per-post data, and I only read them by post ID, which hits the indexed lookup. I'd move to a custom table <b>only when a feature needs to query or sort by vote count across all posts</b> — then I'd migrate the counts into a dedicated table with proper indexes. So: <b>post meta now, custom table when querying becomes a feature.</b>"
-  </div>
-</section>
-
-<!-- 6 -->
-<section>
-  <h2><span class="idx">06</span>WooCommerce Data Architecture — One save(), Three Tables <span class="tag">verified live: DESCRIBE wp_wc_product_meta_lookup</span></h2>
-<pre>$product->set_price( 99 );   <span class="cmt">// memory only — the DB doesn't know yet</span>
+  <section>
+    <h2><span class="num">06</span>WooCommerce 数据架构 —— 一次 save()，三张表</h2>
+    <p>实测：<code>DESCRIBE wp_wc_product_meta_lookup</code></p>
+    <pre><code>$product->set_price( 99 );   <span class="cmt">// 只改内存 —— 数据库还不知道</span>
 $product->save();
-  ├ ① wp_posts                    <span class="cmt">// identity & main content — the anchor</span>
-  ├ ② wp_postmeta                 <span class="cmt">// elastic attributes (_price, _sku, plugin data)</span>
-  └ ③ wp_wc_product_meta_lookup   <span class="cmt">// query copy: min_price DECIMAL(19,4) + MUL index, stock_quantity + MUL…</span></pre>
-  <p><b>Two layers by design:</b> posts/meta are the <b>content layer</b> (the source of truth — WP ecosystem compatible: wp_query, REST, SEO plugins all read posts). The lookup table is the <b>query layer</b> (a denormalized copy: trade write overhead for indexed filtering and sorting). The frontend price filter hits <code>lookup.min_price</code> — a real DECIMAL column with an index — never the LONGTEXT meta_value.</p>
-  <p>Frontend mirror: main database + search index. You write once, queries run against the indexed copy. When our helpful block grows a "most helpful posts" page, the official lookup-table pattern is the reference implementation sitting in our own database.</p>
-</section>
+├ ① wp_posts                  <span class="cmt">// 身份与主内容 —— 锚点</span>
+├ ② wp_postmeta               <span class="cmt">// 弹性属性（_price、_sku、插件数据）</span>
+└ ③ wp_wc_product_meta_lookup <span class="cmt">// 查询副本：min_price DECIMAL(19,4) + MUL 索引，stock_quantity + MUL…</span></code></pre>
+    <p><strong>设计上是两层：</strong>posts/meta 是<strong>内容层</strong>（真相来源 —— WP 生态兼容：WP_Query、REST、SEO 插件都读 posts）；lookup 表是<strong>查询层</strong>（反规范化副本：用一点写入开销换取带索引的筛选与排序）。前台价格筛选打的是 <code>lookup.min_price</code> —— 真正的 DECIMAL 列带索引，永远不打 LONGTEXT 的 meta_value。</p>
+    <div class="takeaway">前端镜像：主数据库 + 搜索索引。写一次，查询走索引副本。等我们的 helpful 块长出「最有用文章」页面时，官方 lookup 表的做法就是数据库里现成的参考实现。</div>
+  </section>
 
-<!-- 7 -->
-<section>
-  <h2><span class="idx">07</span>Classic vs Block Themes — Read From Both Theme Directories <span class="tag">TT5 active · Astra inspected</span></h2>
-  <div class="card">
-    <h3>Same page, two species (single post template)</h3>
-<pre><span class="cmt">// classic (astra): single.php — PHP + HTML mixed</span>
+  <section>
+    <h2><span class="num">07</span>经典 vs 块主题 —— 两个主题目录对照读</h2>
+    <p>TT5 激活 · Astra 旁读。同一个页面，两个物种（single 模板）：</p>
+    <pre><code><span class="cmt">// 经典（astra）：single.php —— PHP + HTML 混写</span>
 get_header();
-&lt;div <span class="kw">id</span>=<span class="str">"primary"</span>&gt;
-    &lt;?php <span class="fn">astra_content_loop</span>(); ?&gt;   <span class="cmt">// internally calls the_content()</span>
-&lt;/div&gt;
+&lt;div id="primary"&gt;&lt;?php astra_content_loop(); ?&gt;&lt;/div&gt;   <span class="cmt">// 内部调用 the_content()</span>
 get_footer();
 
-<span class="cmt">// block (twentytwentyfive): templates/single.html — pure block markup</span>
-&lt;!-- wp:template-part {<span class="str">"slug"</span>:<span class="str">"header"</span>} /--&gt;
+<span class="cmt">// 块（twentytwentyfive）：templates/single.html —— 纯块标记</span>
+&lt;!-- wp:template-part {"slug":"header"} /--&gt;
 &lt;!-- wp:post-title /--&gt;
-&lt;!-- wp:post-content /--&gt;     <span class="cmt">// ← = the_content(), same pipeline underneath</span>
-&lt;!-- wp:template-part {<span class="str">"slug"</span>:<span class="str">"footer"</span>} /--&gt;</pre>
-  </div>
-  <table>
-    <tr><th></th><th>Classic</th><th>Block</th></tr>
-    <tr><td>Template species</td><td>PHP files</td><td>HTML with block markup</td></tr>
-    <tr><td>Change structure</td><td>edit code</td><td>drag blocks in Site Editor → file auto-updates</td></tr>
-    <tr><td>Customization</td><td>3 separate tools: Customizer / Menus / Widgets</td><td>one Site Editor + theme.json design system</td></tr>
-    <tr><td>Content rendering</td><td colspan="2"><b>both converge on the the_content pipeline</b> — plugins are theme-independent (verified: the helpful block renders under both)</td></tr>
-  </table>
-  <div class="quote interview">
-    <div class="who">Selection logic — "who maintains it afterwards"</div>
-    "New build + client self-editing → <b>block theme</b>: the Site Editor is built exactly for that. Old, large site → <b>stay classic</b>: migrating risks losing headers, footers, sidebars — the cost outweighs the benefits. Needs heavy custom logic with a developer on board → classic gives more control."
-  </div>
-</section>
+&lt;!-- wp:post-content /--&gt;        <span class="cmt">// ← 就是 the_content()，底下同一条流水线</span>
+&lt;!-- wp:template-part {"slug":"footer"} /--&gt;</code></pre>
+    <table>
+      <tr><th></th><th>经典</th><th>块</th></tr>
+      <tr><td>模板形态</td><td>PHP 文件</td><td>带块标记的 HTML</td></tr>
+      <tr><td>改结构</td><td>改代码</td><td>站点编辑器拖块 → 文件自动更新</td></tr>
+      <tr><td>定制工具</td><td>三件套：Customizer / 菜单 / 小部件</td><td>站点编辑器 + theme.json 设计系统</td></tr>
+      <tr><td>内容渲染</td><td colspan="2">两条路都汇进 the_content 流水线 —— 插件与主题无关（已验证：helpful 块在两种主题下都渲染）</td></tr>
+    </table>
+    <div class="quote">选型逻辑 —— 「之后谁维护」："新站 + 客户要自己改 → 块主题：站点编辑器就是为这个而生的。大型老站 → 留经典：迁移会丢页头、页脚、侧边栏，成本大于收益。要写重度定制逻辑且有开发者 → 经典更可控。"</div>
+  </section>
 
-<!-- 8 -->
-<section>
-  <h2><span class="idx">08</span>Mock Interview Log <span class="tag">EN output · 4 questions + 2 follow-ups</span></h2>
-  <table>
-    <tr><th>#</th><th>Question</th><th>Extras surfaced by the learner</th><th>Content</th></tr>
-    <tr><td>Q1</td><td>What happens to post content before it appears?</td><td>static vs dynamic block rendering</td><td><span class="ok">85</span></td></tr>
-    <tr><td>Q1-fu</td><td>Follow-up: your Block Hooks plugin vs an Elementor page?</td><td>append at later priority + plain HTML + <code>_elementor_edit_mode</code> meta detection</td><td><span class="ok">80 → pass</span></td></tr>
-    <tr><td>Q2</td><td>Security gates when saving a custom field?</td><td>permission_callback awareness, absint by field type</td><td><span class="warn">70</span></td></tr>
-    <tr><td>Q2-fu</td><td>Follow-up: anything to do on output?</td><td>esc functions → XSS — full four-gate chain delivered</td><td><span class="ok">90</span></td></tr>
-    <tr><td>Q46</td><td>Classic vs block themes + recommendation?</td><td>migration section-loss risk, "who maintains afterwards" dimension</td><td><span class="warn">80</span></td></tr>
-  </table>
-  <p>Every answer was built from things the learner had <b>actually shipped or touched that week</b> — not from flashcards.</p>
-</section>
+  <section>
+    <h2><span class="num">08</span>模拟面试记录</h2>
+    <p>英文作答 · 4 题 + 2 追问</p>
+    <table>
+      <tr><th>#</th><th>题目</th><th>学习者额外掏出的点</th><th>得分</th></tr>
+      <tr><td>Q1</td><td>文章内容出现之前经历了什么？</td><td>静态/动态块渲染的区别</td><td>85</td></tr>
+      <tr><td>Q1-追</td><td>你的 Block Hooks 插件 vs Elementor 页面？</td><td>用更晚优先级追加 + 纯 HTML + <code>_elementor_edit_mode</code> meta 检测</td><td>80 → 通过</td></tr>
+      <tr><td>Q2</td><td>保存自定义字段时的安全关卡？</td><td>permission_callback 意识、按字段类型 absint</td><td>70</td></tr>
+      <tr><td>Q2-追</td><td>输出侧还要做什么？</td><td>esc 函数 → XSS —— 完整四道门链条交出</td><td>90</td></tr>
+      <tr><td>Q46</td><td>经典 vs 块主题 + 推荐？</td><td>迁移丢结构风险、「之后谁维护」维度</td><td>80</td></tr>
+    </table>
+    <div class="takeaway">每个答案都来自学习者<strong>当周真正发布过、碰过的东西</strong> —— 不是卡片背出来的。</div>
+  </section>
 
-<!-- 9 -->
-<section>
-  <h2><span class="idx">09</span>Methodology — Verify AI With Source Code <span class="tag">the core discipline</span></h2>
-  <div class="card">
-    <h3>Case 1 — the camelCase trap</h3>
-    <p>AI (Doubao) proposed <code>"core/post-content": "after"</code>; AI (Hermes) proposed <code>"last_child"</code>. Both wrong. Source (blocks.php L719–724): the key is <code class="hl-green">lastChild</code>. The learner's plugin shipped broken → diagnosed at runtime → fixed by source. <b>Verdict: source 1 – 0 – 0 (Doubao / Hermes / source).</b></p>
-  </div>
-  <div class="card">
-    <h3>Case 2 — the wpautop correction issued TO the AI</h3>
-    <p>Hermes taught "dynamic block output must be compact or wpautop breaks it", then criticized the learner's remove/restore answer as wrong. The learner opened blocks.php, found L2528–2529, and disproved the teaching. Verdict corrected: <span class="hl-green">block content is structurally immune to wpautop</span>; compact output is hygiene, not armor.</p>
-  </div>
-  <div class="card">
-    <h3>Case 3 — the Upwork triage</h3>
-    <p>Seven jobs across two days. Decision rule run on every one: <b>quote ÷ scope = real hourly rate; total spent ÷ hires = client tier</b>. Result: GHL integration accepted ($30–45/hr, WP+API exact fit, contract-to-hire); five killed — a $35 marketplace MVP (a $2,000 build), a $10 full-store rebuild (client lifetime spend $25, avg $6.25/hire), a $20 slider config (zero code growth), an AskAgento case study (fabricated-revenue red line).</p>
-  </div>
-</section>
+  <section>
+    <h2><span class="num">09</span>方法论 —— 用源码验证 AI</h2>
+    <p>核心纪律：</p>
+    <h3>案例 1 —— camelCase 陷阱</h3>
+    <p>豆包建议 <code>"core/post-content": "after"</code>；Hermes 建议 <code>"last_child"</code>。<strong>两个都错。</strong>源码（blocks.php L719–724）：键是 <code>lastChild</code>。插件带着错误的写法上线 → 运行时诊断 → 靠源码修好。<strong>判定：源码 1 – 0 – 0。</strong></p>
+    <h3>案例 2 —— 一次「学习者纠正 AI」</h3>
+    <p>Hermes 先教「动态块输出必须紧凑否则被 wpautop 破坏」，又批评学习者的 remove/restore 答案是错的。学习者打开 blocks.php 找到 L2528–2529，推翻了这个教法。<strong>修正后的判定：块内容对 wpautop 天然免疫；紧凑输出是卫生，不是铠甲。</strong></p>
+    <h3>案例 3 —— Upwork 筛单</h3>
+    <p>两天七个标。每个都跑同一条决策规则：<strong>报价 ÷ 工作量 = 真实时薪；总花费 ÷ 雇佣数 = 客户档位</strong>。结果：GHL 集成接了（$30–45/小时，WP+API 精确对口，contract-to-hire）；五个杀了 —— $35 的市场 MVP（实为 $2,000 的活）、$10 整店重做（客户终身花费 $25，平均每单 $6.25）、$20 滑块配置（零代码积累）、AskAgento 案例研究（虚构营收，红线）。</p>
+    <div class="ok"><strong>下一步：</strong>wpex-helpful-block 的 README（首段 = 上面第 01 节的流水线答案）· Q3 meta_query 性能 · 语音仿真 × 3 轮 · GHL 客户回复待跟进。</div>
+    <p style="margin-top:16px"><strong>纪律不变：先读源码，验证每一条 AI 说法，交付一个真实作品。</strong></p>
+  </section>
+
+</main>
 
 <footer>
-  <p><b>Next:</b> <span class="next">README for wpex-helpful-block (first section = the pipeline answer above) · Q3 meta_query performance · voice simulation × 3 rounds · GHL client response pending.</span></p>
-  <p style="margin-top:10px">The discipline stands: <b style="color:var(--accent)">read source first, verify every AI claim, ship something real.</b><br>
-  Generated as part of wp-core-notes — the reading-notes repository of qdscitizen.</p>
+  2026-11-13 中文化整理 · 原为英文版（Nov 4–9, 2026）· 仓库 qdscitizen/wp-core-notes
 </footer>
 
-</div>
 </body>
 </html>
