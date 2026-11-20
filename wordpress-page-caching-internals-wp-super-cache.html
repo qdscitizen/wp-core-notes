@@ -36,6 +36,7 @@
   footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 24px 0 40px; }
   .q { background: #faf9fe; border: 1px solid #e8e2f5; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
   .q b { color: var(--accent2); }
+  .insider { color: var(--accent2); font-size: 13.5px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -191,7 +192,53 @@ Concurrent requests               → render their own pages normally, just don'
   </section>
 
   <section>
-    <h2><span class="num">9</span>Key takeaways</h2>
+    
+  <section>
+    <h2><span class="num">9</span>Scenario chains — four drills (main question + three follow-ups each)</h2>
+    <p>Interviewers rarely ask "how does page caching work" cold. They wrap it in a client scenario and drill. Four chains below cover the real surface: layered diagnosis, personalization, WooCommerce, and the POST disaster.</p>
+
+    <h3>Chain A — "The invisible redesign" (layered diagnosis)</h3>
+    <div class="q">
+      <b>Main: "A client published a new homepage design hours ago. Some visitors still see the old one. Walk me through your diagnosis."</b>
+      <p><b>FU1 — How do you find out WHICH layer is caching?</b> Peel from outside in: hard refresh (browser), then check CDN response headers (<code>Age</code>, <code>X-Cache</code>) with curl, then temporarily disable the page cache, then the object cache. Don't guess — each layer has a header or a switch.</p>
+      <p><b>FU2 — It's the page cache. How do you purge it right now?</b> The plugin's purge button, wp-cli, or simply re-saving the page — <code>save_post</code> fires the purge automatically. If a CDN sits in front, purge its API too.</p>
+      <p><b>FU3 — How do you prevent this next time?</b> Purge-on-publish should already be automatic (hooks); if a CDN is involved, wire its purge API into publishing too — and set the client's expectation about propagation delay.</p>
+      <p class="insider"><i>Insider signal: peeling layers outside-in using headers, not guessing "clear the cache and pray."</i></p>
+    </div>
+
+    <h3>Chain B — "Members seeing each other's data" (personalization)</h3>
+    <div class="q">
+      <b>Main: "On a membership site with page caching, members occasionally see ANOTHER member's name or cart contents. What went wrong?"</b>
+      <p><b>FU1 — Root cause?</b> A personalized page got cached and re-served to someone else. Either the cache plugin doesn't recognize the membership plugin's cookie (it only knows wordpress_logged_in_), or an exclusion for member pages is missing.</p>
+      <p><b>FU2 — Fix options?</b> Three: exclude member URLs from the cache; cache the static shell and load personalized parts via AJAX; add the membership cookie to the rejected-cookie list so those requests never hit the cache.</p>
+      <p><b>FU3 — How do you verify the fix?</b> Two browser profiles — one logged in, one anonymous — load the same page and compare. Plus check response headers for cache-hit indicators on every variant.</p>
+      <p class="insider"><i>Insider signal: the shell + AJAX pattern for personalization, and testing with two parallel sessions.</i></p>
+    </div>
+
+    <h3>Chain C — "Caching a WooCommerce store" (commerce)</h3>
+    <div class="q">
+      <b>Main: "How would you set up page caching for a WooCommerce store with 5,000 products?"</b>
+      <p><b>FU1 — Which pages must never be cached?</b> Cart, checkout, my-account — and anything reached by POST. These are personal and state-changing; the cache plugin's cart-cookie detection usually handles them, but verify the exclusions explicitly.</p>
+      <p><b>FU2 — Product pages: cacheable? What happens when a price changes?</b> Cacheable — product pages are identical for anonymous visitors. When a price changes, WooCommerce fires hooks on save, and the cache plugin purges that product's cache (the lookup table updates in the same save). Stale prices mean the purge wiring is broken.</p>
+      <p><b>FU3 — Does caching break "Only 3 left in stock" badges?</b> It can go stale for the cache duration. Either accept a few minutes of imprecision, refresh stock via JS, or exclude product pages if stock precision is business-critical.</p>
+      <p class="insider"><i>Insider signal: knowing WooCommerce fires purge hooks on product save, and that the cart cookie is the line between cacheable and not.</i></p>
+    </div>
+
+    <h3>Chain D — "The confirmation page leak" (the POST disaster)</h3>
+    <div class="q">
+      <b>Main: "After enabling a page cache, some visitors received OTHER people's form submission confirmation pages. What happened?"</b>
+      <p><b>FU1 — Root cause?</b> A confirmation page was cached and re-served. Two usual suspects: the form submits via GET (query-string URLs got cached), or an intermediate layer — typically a CDN — cached the POST response.</p>
+      <p><b>FU2 — Which layer is guilty?</b> Page-cache plugins refuse POST requests (the guard chain checks the request method), so the plugin itself is rarely the culprit. Check the form method first; if it's POST with a confirmation leak, the CDN is the usual suspect.</p>
+      <p><b>FU3 — Hardening?</b> <code>Cache-Control: no-store</code> on confirmation endpoints, POST-only forms, and tokenized one-time confirmation URLs so a cached copy is useless to anyone else.</p>
+      <p class="insider"><i>Insider signal: suspecting the CDN instead of blaming the page cache — because you know the plugin's guard chain refuses POST.</i></p>
+    </div>
+
+    <div class="ok"><b>Why these four:</b> layered diagnosis (operations), personalization (membership), commerce rules (WooCommerce), and the POST disaster (safety). Between them they touch every guard check in the source — without quoting a single line number.</div>
+  </section>
+
+
+  <section>
+    <h2><span class="num">10</span>Key takeaways</h2>
     <ul>
       <li><b>Read early, write late:</b> phase 1 (wp-settings.php:102) serves and exits; phase 2 (:614 → postload → ob_start) captures and writes.</li>
       <li><b>Dual file layers:</b> supercache pure static can bypass PHP entirely (Expert mode); wp-cache carries meta and is served through PHP.</li>
