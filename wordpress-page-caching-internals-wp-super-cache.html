@@ -112,6 +112,22 @@
     </table>
     <p>Extra exclusions in the supercache branch (L201-216): non-empty GET args / any cookie / Accept header not text/html / <b>expiry check (L213: <code>filemtime + $cache_max_time &lt; time()</code>)</b> — any hit means don't serve.</p>
     <div class="highlight">On a hit: <code>file_get_contents</code> reads the HTML → (optional gzip) → output → <b>exit</b>. At that moment mu-plugins, plugins, the theme and the MySQL connection — none of them exist. That's the source-level proof of "a page-cache hit means WordPress never boots."</div>
+
+    <h3>Late init — delaying serve until init (wp_super_cache_late_init)</h3>
+    <p>The hit path above is the <b>default mode</b>: phase 1 tries to serve immediately — at that point WordPress has only loaded core files; no plugins, no theme. The <b>Late init</b> switch in the advanced settings (<code>wp_super_cache_late_init</code>) changes this: phase 1 L193 no longer serves immediately — instead, postload (L434-440) registers <code>add_action('init', 'wp_cache_late_loader', 9999)</code>, so the serve-or-capture decision happens only <b>after WordPress has fully loaded</b> (after the init hook has fired).</p>
+    <table>
+      <tr><th>Dimension</th><th>Default (early serve)</th><th>Late init</th></tr>
+      <tr><td>Serve timing</td><td>Earliest possible — plugins and theme not loaded</td><td>After init — all plugins and theme functions.php loaded</td></tr>
+      <tr><td>Hit speed</td><td>Near-instant (milliseconds, almost zero boot cost)</td><td>Slower (pays the full WordPress bootstrap, tens to hundreds of ms)</td></tr>
+      <tr><td>Context correctness</td><td>Plugins never participate — a Chinese visitor may be served a cached English page</td><td>Multilingual / membership / device-detection plugins run first; the serve decision is context-correct</td></tr>
+      <tr><td>Cache key granularity</td><td>URL only</td><td>Can include locale, user group and other context dimensions — finer cache files</td></tr>
+      <tr><td>Best for</td><td>Pure content sites, simple blogs</td><td>Multilingual (WPML/Polylang), membership sites, complex plugin ecosystems</td></tr>
+    </table>
+    <p><b>When to use it:</b> multilingual sites are the classic case — WPML/Polylang determine the locale only around init, so early serve can hand an English cached page to a Chinese visitor. Membership sites are the same: whenever personal context affects cache correctness, turn it on.</p>
+    <p><b>Benefit:</b> the serve/cache decision is based on the fully-loaded WordPress context — maximum correctness; cache keys can include locale/user-group dimensions, so different visitor segments hit their own cache files.</p>
+    <p><b>Cost:</b> even a cache hit now pays the full WordPress bootstrap (all mu-plugins, plugins, theme functions.php loaded) — the caching benefit is heavily reduced; hits degrade from milliseconds to hundreds of milliseconds. On a simple content site it's pure loss.</p>
+    <div class="takeaway"><b>Interview line:</b> "If late init is enabled, serving is delayed until the init hook — plugins like WPML get to run first, so the cache decision is context-correct. The trade-off: even a cache hit pays for the full WordPress bootstrap. Simple sites keep it off; multilingual or membership sites turn it on for correctness."</div>
+
   </section>
 
   <section>
