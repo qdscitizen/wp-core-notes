@@ -247,6 +247,44 @@ register_block_type_from_metadata(
     <div class="ok"><b>满分心法：</b>这组题的分不在名词解释，在<b>能报出源码位置 + 说出「为什么这样设计」</b>。比如「为什么 Block Hooks 放优先级 8」——因为要赶在 do_blocks(9) 之前把标记塞进去。</div>
   </section>
 
+
+  <section>
+    <h2><span class="num">10</span>场景链 — 四组实战演练（主问 + 三追问）</h2>
+
+    <h3>链 A — 「短码输出的页面排版全乱了」</h3>
+    <div class="q">
+      <b>主问：「客户的页面里，短码生成的内容上下多了 &lt;p&gt; 标签，布局坏了。为什么？」</b>
+      <p><b>追 1 — 为什么短码会被 p 包住？</b>短码在优先级 11 才展开，而 wpautop 在 10 —— 展开前的 <code>[foo]</code> 只是一段文本，早被 wpautop 按规则包进了段落。展开后的 HTML 自然继承了这个错误的外壳。</p>
+      <p><b>追 2 — 怎么修？</b>让短码 handler 返回紧凑 HTML（不带换行）；或者输出后手动清理邻近的空 p。根治思路是让输出在 wpautop 看来是「一段不可分割的内容」。</p>
+      <p><b>追 3 — 块内容也会这样吗？</b>不会 —— 内容含块时 do_blocks 会把 wpautop 从链上摘掉，块输出天然免疫。这也是「块内容 vs 经典内容」排错时第一个要问的问题。</p>
+    </div>
+
+    <h3>链 B — 「用户输入的 HTML 标签全变成了转义实体」</h3>
+    <div class="q">
+      <b>主问：「用户在表单里输入 &lt;b&gt;test&lt;/b&gt;，保存后数据库里是转义实体。这是 bug 吗？」</b>
+      <p><b>追 1 — 哪一层干的？</b>不是 bug —— 是写路径的第三段清洗：<code>_wp_specialchars</code>（优先级 30）在 INSERT 之前把特殊字符转成实体。这是纵深防御：存安全值，读的时候怎么用都安全。</p>
+      <p><b>追 2 — 输出时还会再转义一次吗？</b>会 —— 输出侧 <code>esc_html</code> 是第二道保险。两层叠加保证：即使某层被绕过，另一层还在。转义是幂等的，不会越转越乱。</p>
+      <p><b>追 3 — 如果用户要发富文本呢？</b>不能用 sanitize_text_field（会把标签全剥掉）—— 用 <code>wp_kses</code> 白名单过滤：普通用户走窄名单 <code>$allowedtags</code>，受信任角色走宽名单 <code>$allowedposttags</code>。<b>按字段类型选清洗器，绝不混用。</b></p>
+    </div>
+
+    <h3>链 C — 「后台标签页开一天后，AJAX 全部 403」</h3>
+    <div class="q">
+      <b>主问：「运营同事的后台标签页开了一整天，插件的 AJAX 操作开始全部 403，刷新页面又恢复正常。为什么？」</b>
+      <p><b>追 1 — nonce 为什么会过期？</b>nonce 的哈希输入包含 tick（12 小时一个的时间窗）和 session_token —— 超过 24 小时（两个窗口都滑出），校验必然失败。这是设计：nonce 本来就该短命。</p>
+      <p><b>追 2 — 为什么刷新就好？</b>刷新重新生成页面，PHP 输出了全新的 nonce —— 浏览器拿到了新票据。</p>
+      <p><b>追 3 — 怎么根治（不靠用户刷新）？</b>核心在每个成功响应里回传新的 <code>X-WP-Nonce</code> 头 —— 客端 JS 每次请求后读这个头更新本地 nonce，票据就永远不会老化。<b>DraftLab Pro 的真实审计发现与修复。</b></p>
+    </div>
+
+    <h3>链 D — 「自定义块编辑器里正常，前台空白」</h3>
+    <div class="q">
+      <b>主问：「注册了一个自定义块，编辑器里一切正常，保存后前台却不显示内容。排查思路？」</b>
+      <p><b>追 1 — 块真的注册了吗？</b>没注册的块标记不会被解析 —— WordPress 原样输出注释和内部 HTML。查看前台源码有没有 <code>&lt;!-- wp:myblock --&gt;</code> 原样残留。</p>
+      <p><b>追 2 — 是动态块吗？render_callback 返回了什么？</b>动态块靠 render_callback 出内容 —— 回调没注册、路径错误、或返回了空字符串，前台就是空白。静态块则看 save() 的输出。</p>
+      <p><b>追 3 — 保存的标记是什么？</b>编辑器保存的是 save.js 生成的标记；动态块的 render_callback 会在渲染时覆盖它。两边不一致 = 保存后再编辑时块失效（block validation error）。</p>
+    </div>
+
+    <div class="ok"><b>懂行信号：</b>链 A 报出「优先级 10 vs 11 的顺序」；链 B 说出「纵深防御、幂等」；链 C 讲出 <code>X-WP-Nonce</code> 刷新方案；链 D 区分静态/动态块的排查方向。四条链没有一个行号，全是机制。</div>
+  </section>
 </main>
 
 <footer>

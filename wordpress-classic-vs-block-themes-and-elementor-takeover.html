@@ -168,6 +168,36 @@
     <div class="ok"><b>满分心法：</b>「Elementor 把 the_content 整个换掉」这一条能说出<b>优先级 9 + 摘掉三个排版钩子</b>，就已经超过绝大多数候选人 —— 他们只知道「Elementor 不能用 Block Hooks」这个结论，说不出机制。</div>
   </section>
 
+
+  <section>
+    <h2><span class="num">8</span>场景链 — 三组实战演练（主问 + 三追问）</h2>
+
+    <h3>链 A — 「在站点编辑器里改了导航，前台一点没变」</h3>
+    <div class="q">
+      <b>主问：「客户的站：块主题 + Elementor 首页。客户在站点编辑器改导航，保存成功，首页纹丝不动。排查？」</b>
+      <p><b>追 1 — 第一个问题问什么？</b>不是「缓存脏了吗」，是「<b>我改的数据，是渲染路径真正读的那份吗？」</b>首页由 Elementor 渲染，导航绑定的是经典菜单（nav_menu term），而站点编辑器改的是另一个实体 wp_navigation —— 两个并行系统，零数据关联。</p>
+      <p><b>追 2 — 怎么改才有效？</b>经典路径：外观 → 菜单（块主题默认隐藏该界面，切到注册了菜单位置的主题即可恢复）；或者用 Elementor 自己的菜单小部件设置。</p>
+      <p><b>追 3 — 怎么避免客户再踩？</b>文档标注「这个站的导航在 Elementor 里改」；或者统一：首页模板换回主题原生，放弃 Elementor 接管。</p>
+    </div>
+
+    <h3>链 B — 「客户的经典老站想迁块主题，你的建议？」</h3>
+    <div class="q">
+      <b>主问：「一个运行多年的经典主题站（重度 PHP 定制 + Elementor），客户想把整站迁到块主题。你怎么建议？」</b>
+      <p><b>追 1 — 迁移会丢什么？</b>页头页脚结构、侧边栏、Customizer 设置、菜单位置绑定 —— 经典结构存在代码和 option 里，块主题不读它们。迁移成本 = 重建所有非内容区域。</p>
+      <p><b>追 2 — 什么情况才值得迁？</b>新站 + 客户要自助编辑 → 直接块主题起步。老站「能跑就不要重做」—— 迁移成本大于收益，敢说不推荐就是经验。</p>
+      <p><b>追 3 — 客户坚持要迁，怎么降风险？</b>staging 上先做；内容（文章）不动，只换外壳；逐模板对照回归测试；Elementor 页面短期保留（它接管渲染，不依赖主题模板）。</p>
+    </div>
+
+    <h3>链 C — 「插件的 Block Hooks 在客户的 Elementor 页面不工作」</h3>
+    <div class="q">
+      <b>主问：「你的插件用 Block Hooks 自动插入内容，在经典主题和块主题下都正常，客户的 Elementor 页面上却完全不出现。为什么？」</b>
+      <p><b>追 1 — 为什么失效？</b>Block Hooks 在优先级 8 往块树里插标记，但 Elementor 在优先级 9 用 <code>_elementor_data</code> 编译出的 HTML <b>整体替换</b>了 the_content —— 注入被丢弃。Elementor 页面没有块树，没有锚点。</p>
+      <p><b>追 2 — 兜底方案？</b>the_content 过滤器挂优先级 999，回调里用 render_block() 把自己的块渲染成 HTML 追加到首尾。代价：失去块级定位精度（Block Hooks 能 firstChild/lastChild，过滤器只能全局首尾）。</p>
+      <p><b>追 3 — 怎么知道当前页面是 Elementor 渲染的？</b>检查 <code>_elementor_edit_mode</code> meta，或挂 Elementor 自己的过滤器 elementor/frontend/the_content —— 让插件自己识别并切换策略。</p>
+    </div>
+
+    <div class="ok"><b>懂行信号：</b>链 A 第一句就问「渲染读的是哪份数据」；链 B 敢说「不推荐迁移」并给成本依据；链 C 讲出「优先级 9 整体替换」的机制而不是只说结论。三条链没有一个行号。</div>
+  </section>
 </main>
 
 <footer>
