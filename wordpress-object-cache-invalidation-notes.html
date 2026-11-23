@@ -1,4 +1,38 @@
-<!DOCTYPE html>
+<!DOCTYPE
+
+  <section>
+    <h2><span class="num">9</span>Scenario chains — four drills (main question + three follow-ups each)</h2>
+    <h3>Chain A — "The voting plugin went viral — and the whole site slowed down"</h3>
+    <div class="q">
+      <b>Main: "Traffic to our helpful-vote plugin grew, and now the entire site is slow. Why would a voting feature drag down everything?"</b>
+      <p><b>FU1 — The mechanism?</b> Every vote is one update_post_meta → the last_changed version bumps → every WP_Query cache entry site-wide goes stale. More votes per second, shorter average cache lifetime.</p>
+      <p><b>FU2 — Didn't Redis fix this?</b> It made it visible: Redis shares the list cache across visitors — its whole value is "visitor B hits visitor A's query". With the version bumping constantly, that shared cache keeps getting invalidated. The expensive component is doing nothing.</p>
+      <p><b>FU3 — Fix and timing?</b> Move counts to a dedicated table — its writes never touch the posts version number. The timing rule: "post meta now, custom table when querying becomes a feature" — or when vote frequency demonstrably thrashes the cache, or when a ranked list ships.</p>
+    </div>
+    <h3>Chain B — "Pages are slow for logged-in users but instant for anonymous visitors"</h3>
+    <div class="q">
+      <b>Main: "Editors and members complain the site is slow, yet anonymous visitors get lightning-fast pages. Why?"</b>
+      <p><b>FU1 — Why does page caching skip logged-in users?</b> Page cache stores finished HTML — which carries a personal point of view (login bar, cart, greeting). Serving visitor A's finished page to visitor B is data leakage. So the plugin sees the login cookie and skips: logged-in users get their pages built every time.</p>
+      <p><b>FU2 — How does Redis help?</b> Building a page is two steps: query data (expensive) + assemble HTML (cheap). Page caching skips BOTH steps; object cache skips only the querying — and data has no owner, so logged-in users' queries hit Redis. Pages drop from hundreds of ms to tens.</p>
+      <p><b>FU3 — What's the production standard?</b> Both layers stacked: page cache serves anonymous visitors at maximum speed, object cache serves logged-in users and cache misses as the fallback.</p>
+    </div>
+    <h3>Chain C — "Ops updated the database directly — the front end shows the old value forever"</h3>
+    <div class="q">
+      <b>Main: "Ops changed a meta value with raw SQL, confirmed it's new in the database — but refreshing the front end a hundred times still shows the old value. Why?"</b>
+      <p><b>FU1 — Why doesn't refreshing help?</b> Reads are cache-first: get_post_meta asks Redis, the old entry is still alive (nobody deleted it), it returns immediately. The new value sits in the database and never gets read.</p>
+      <p><b>FU2 — The fix?</b> Raw SQL bypassed the hooks — no cache delete, no version bump. Remedy: call clean_post_cache($post_id) — it deletes the per-post entry and bumps the version in one call.</p>
+      <p><b>FU3 — How do you prevent a repeat?</b> Policy: all writes through the standard API; when raw SQL is unavoidable, code review checks for clean_post_cache after the write. The interview value is the three-layer story: fresh database / stale cache / cache-first read order.</p>
+    </div>
+    <h3>Chain D — "What do transients have to do with the object cache?"</h3>
+    <div class="q">
+      <b>Main: "Where does set_transient() actually store data — and why did transient operations get faster after we installed Redis?"</b>
+      <p><b>FU1 — Where does it live without Redis?</b> In the wp_options table — that's why transients are cross-request even without persistent caching (the database is the fallback), but every read is a database query.</p>
+      <p><b>FU2 — After installing Redis?</b> Once object-cache.php takes over, transients move into Redis memory — reads go from database queries to microsecond memory operations. Plugins that lean on transients (WooCommerce, SEO suites) speed up wholesale.</p>
+      <p><b>FU3 — How does expiry differ?</b> Transients use explicit TTLs (the third argument — time-driven). The object cache itself is event-driven (data changes → invalidate immediately; unchanged → lives on). Two different philosophies.</p>
+    </div>
+    <div class="ok"><b>Insider signals:</b> A — the mechanism "high-frequency version bumps invalidate the shared cache"; B — "Redis saves the querying, not the assembly"; C — the three-layer narrative (fresh DB / stale cache / cache-first reads); D — separating time-driven from event-driven. Four chains, zero line numbers, all mechanism.</div>
+  </section>
+ html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
